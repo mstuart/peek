@@ -31,11 +31,20 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { discoverClaudeSessions } from "../adapters/claude/discover.js";
+import {
+  DEFAULT_ROOT as CLAUDE_DEFAULT_ROOT,
+  discoverClaudeSessions,
+} from "../adapters/claude/discover.js";
 import { parseClaudeSession } from "../adapters/claude/parse.js";
-import { discoverCodexSessions } from "../adapters/codex/discover.js";
+import {
+  DEFAULT_ROOT as CODEX_DEFAULT_ROOT,
+  discoverCodexSessions,
+} from "../adapters/codex/discover.js";
 import { parseCodexSession } from "../adapters/codex/parse.js";
-import { discoverPiSessions } from "../adapters/pi/discover.js";
+import {
+  discoverPiSessions,
+  defaultRoot as piDefaultRoot,
+} from "../adapters/pi/discover.js";
 import { parsePiSession } from "../adapters/pi/parse.js";
 import { dedupSession } from "../engine/dedup.js";
 import { formatCost } from "../model/format.js";
@@ -135,6 +144,56 @@ export async function discoverAll(
     discoverPiSessions(opts.roots?.pi),
   ]);
   return applyFilters([...claude, ...codex, ...pi], opts);
+}
+
+// ---------------------------------------------------------------------------
+// "No sessions found" messaging convention.
+//
+// Two different situations both say "no sessions found", and they are NOT
+// the same thing:
+//   - list-empty (peek list's printListReport, cost/compactions/context
+//     with no matches): the discovery roots exist and were readable, they
+//     just happen to hold nothing that matches the filters. This is a
+//     normal, successful outcome — exit 0.
+//   - unresolvable-target (resolveSessionRef below, when a bare `peek
+//     context`/`cost`/... has no session to default to): the caller asked
+//     to resolve to something specific (most-recent session, or an id/path)
+//     and nothing could be produced. This is a failure the caller must
+//     react to — exit 1 (thrown Error, caught by each command's own
+//     try/catch in cli.ts).
+// Both cases used to say only "check discovery roots" — checkedRootsList/
+// describeCheckedRoots below name the ACTUAL resolved root(s) (honoring
+// opts.roots' test-only override and pi's $PI_AGENT_DIR) so the message is
+// immediately actionable instead of sending the user hunting for the paths.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_ROOT_BY_HARNESS: Record<HarnessId, () => string> = {
+  "claude-code": () => CLAUDE_DEFAULT_ROOT,
+  codex: () => CODEX_DEFAULT_ROOT,
+  pi: () => piDefaultRoot(),
+};
+
+/** The concrete discovery root path(s) actually in scope for a given
+ * discoverAll/resolveSessionRef call: opts.roots' per-harness override when
+ * present (test-only escape hatch), else that harness's real resolved
+ * default. Scoped to the single harness when --harness filters, otherwise
+ * all three. */
+export function checkedRootsList(opts: ResolveOptions = {}): string[] {
+  const harnesses: readonly HarnessId[] = opts.harness
+    ? [opts.harness]
+    : HARNESS_IDS;
+  return harnesses.flatMap((h) => {
+    const override = opts.roots?.[h];
+    return override && override.length > 0
+      ? override
+      : [DEFAULT_ROOT_BY_HARNESS[h]()];
+  });
+}
+
+/** checkedRootsList, comma-joined for inline use in a "no sessions found"
+ * message. */
+export function describeCheckedRoots(opts: ResolveOptions = {}): string {
+  return checkedRootsList(opts).join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +355,7 @@ export async function resolveSessionRef(
   if (input === undefined) {
     if (refs.length === 0) {
       throw new Error(
-        "no sessions found under the default (or --cwd/--harness-filtered) discovery roots",
+        `no sessions found — checked ${describeCheckedRoots(opts)} (narrowed by --cwd/--harness if passed)`,
       );
     }
     return mostRecent(refs);

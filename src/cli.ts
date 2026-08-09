@@ -94,9 +94,26 @@ registerReportCommand(program);
 registerBenchCommand(program);
 registerPricingCommand(program);
 
-// No other subcommands yet — bare `peek` prints help.
+// No other subcommands are registered above, so any leftover positional
+// arguments here are either nothing (bare `peek`, exit 0 help) or an
+// unrecognized command name (error, exit 1) — commander routes both cases
+// through this single root action rather than its own command:* handler
+// once a root .action() is defined, so the branch happens here instead.
+// program.args (not a declared `.arguments()`) picks up the leftover tokens
+// without adding a spurious "[args...]" to the --help usage line.
+// allowExcessArguments: without it, commander's own zero-declared-args
+// arity check on the root command rejects any leftover token BEFORE this
+// action runs, with its generic "too many arguments" message instead of the
+// actionable one below.
+program.allowExcessArguments();
 program.action(() => {
-  program.help();
+  const leftover = program.args;
+  if (leftover.length === 0) {
+    program.help();
+    return;
+  }
+  process.stderr.write(`unknown command '${leftover[0]}' — run peek --help\n`);
+  process.exitCode = 1;
 });
 
 program.parse(process.argv);

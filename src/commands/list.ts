@@ -21,6 +21,7 @@ import { serializeJSON } from "../render/json.js";
 import { formatCompact, formatNumber, renderTable } from "../render/table.js";
 import {
   type DiscoverAllOptions,
+  describeCheckedRoots,
   discoverAll,
   formatCost,
   formatTimestamp,
@@ -210,7 +211,17 @@ export interface ListCommandOptions {
    * fixtures instead of the real discovery roots. Production callers (the
    * CLI action below) never set this. */
   roots?: DiscoverAllOptions["roots"];
+  /** Max rows the TEXT table prints; undefined -> DEFAULT_LIST_LIMIT.
+   * `0` = unlimited. Display truncation only — does NOT affect what
+   * loadEntries loads or what --json emits: --json is the scripting
+   * surface and always serializes the full report regardless of --limit. */
+  limit?: number;
 }
+
+/** `peek list`'s default text-table row cap — large discovery trees
+ * (docs/PERF.md: 7.5k+ main sessions is a real corpus size) produce a table
+ * too long to be useful without one. `--limit 0` opts out entirely. */
+export const DEFAULT_LIST_LIMIT = 50;
 
 // Chunked-batch concurrency cap (docs/PERF.md fix #2): parsing is CPU-bound
 // on a single JS thread (per PERF.md's throughput math), so this doesn't cut
@@ -292,14 +303,23 @@ export async function loadEntries(
   };
 }
 
-function printListReport(report: ListReport): void {
+/** `checkedRoots`: shared.ts's describeCheckedRoots(options), precomputed by
+ * the caller (runListCommand) since this function stays a plain sync
+ * renderer otherwise. `limit`: 0 = unlimited, matching DEFAULT_LIST_LIMIT's
+ * own `--limit 0` contract. */
+function printListReport(
+  report: ListReport,
+  opts: { limit: number; checkedRoots: string },
+): void {
   if (report.rows.length === 0) {
     process.stdout.write(
-      "no sessions found (try --harness/--cwd/--since, or check discovery roots)\n",
+      `no sessions found — checked ${opts.checkedRoots} (try --harness/--cwd/--since to narrow or widen the search)\n`,
     );
     return;
   }
-  const rows = report.rows.map((r) => [
+  const shown =
+    opts.limit === 0 ? report.rows : report.rows.slice(0, opts.limit);
+  const rows = shown.map((r) => [
     r.harness,
     r.sessionIdShort,
     r.cwdLabel,
@@ -323,6 +343,12 @@ function printListReport(report: ListReport): void {
     rows,
   );
   process.stdout.write(`${table}\n`);
+  const remaining = report.rows.length - shown.length;
+  if (remaining > 0) {
+    process.stdout.write(
+      `…and ${formatNumber(remaining)} more session${remaining === 1 ? "" : "s"} (use --limit <n> or --limit 0 for all)\n`,
+    );
+  }
 }
 
 export async function runListCommand(
@@ -341,12 +367,26 @@ export async function runListCommand(
     process.stdout.write(`${serializeJSON(report)}\n`);
     return;
   }
-  printListReport(report);
+  const rootsOpts: Parameters<typeof describeCheckedRoots>[0] = {};
+  if (options.harness !== undefined) rootsOpts.harness = options.harness;
+  if (options.roots !== undefined) rootsOpts.roots = options.roots;
+  printListReport(report, {
+    limit: options.limit ?? DEFAULT_LIST_LIMIT,
+    checkedRoots: describeCheckedRoots(rootsOpts),
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Command registration — the orchestrator wires this into cli.ts.
 // ---------------------------------------------------------------------------
+
+function parseLimit(value: string): number {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`--limit must be a non-negative integer (got: ${value})`);
+  }
+  return n;
+}
 
 export function registerListCommand(program: Command): void {
   program
@@ -372,6 +412,12 @@ export function registerListCommand(program: Command): void {
     .option("--json", "emit the full computed structure as JSON")
     .option("--no-cache", "bypass the on-disk totals cache; always parse fresh")
     .option("--verbose", "print cache hit/miss counts to stderr")
+    .option(
+      "--limit <n>",
+      "max rows to print (0 = unlimited); does not affect --json, which is always the full report",
+      parseLimit,
+      DEFAULT_LIST_LIMIT,
+    )
     .action(
       async (opts: {
         harness?: HarnessId;
@@ -381,6 +427,7 @@ export function registerListCommand(program: Command): void {
         json?: boolean;
         cache?: boolean;
         verbose?: boolean;
+        limit: number;
       }) => {
         try {
           const commandOpts: ListCommandOptions = {
@@ -388,6 +435,7 @@ export function registerListCommand(program: Command): void {
             json: Boolean(opts.json),
             cache: opts.cache !== false,
             verbose: Boolean(opts.verbose),
+            limit: opts.limit,
           };
           if (opts.harness !== undefined) commandOpts.harness = opts.harness;
           if (opts.cwd !== undefined) commandOpts.cwd = opts.cwd;

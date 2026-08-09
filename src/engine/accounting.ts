@@ -221,13 +221,32 @@ export function calculateCost(
     cacheWrite1h = usage.cacheWrite1h * base1h;
   }
 
+  const total = input + output + cacheRead + cacheWrite5m + cacheWrite1h;
+
+  // Defense-in-depth backstop: whatever produced a non-finite component here (a corrupted or
+  // hostile pricing snapshot that slipped past upstream validation, a future bug, a pathological
+  // usage count) must never surface as `priced:true` with a NaN/Infinity dollar figure — that
+  // would violate the codebase's honesty invariant that priced:true never coincides with a
+  // null/NaN cost. Degrade to an explicit unpriced zero instead, exactly like an unresolvable
+  // model id does via zeroCost() in priceTurn below.
+  if (
+    !Number.isFinite(input) ||
+    !Number.isFinite(output) ||
+    !Number.isFinite(cacheRead) ||
+    !Number.isFinite(cacheWrite5m) ||
+    !Number.isFinite(cacheWrite1h) ||
+    !Number.isFinite(total)
+  ) {
+    return zeroCost(mode, false);
+  }
+
   return {
     input,
     output,
     cacheRead,
     cacheWrite5m,
     cacheWrite1h,
-    total: input + output + cacheRead + cacheWrite5m + cacheWrite1h,
+    total,
     mode,
     priced: true,
   };

@@ -14,7 +14,10 @@ const SESSION_FILENAME_RE =
   /^[^_]+_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 const SLUG_DIR_RE = /^--(.+)--$/;
 
-function defaultRoot(): string {
+// Exported so commands/shared.ts's "no sessions found" messages can name the
+// concrete root actually checked (honoring $PI_AGENT_DIR) instead of a vague
+// "check discovery roots".
+export function defaultRoot(): string {
   const base = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
   return join(base, "sessions");
 }

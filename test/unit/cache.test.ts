@@ -3,9 +3,11 @@
 // conventions where relevant.
 
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -144,6 +146,52 @@ describe("cache/totals", () => {
     ).toBeUndefined();
   });
 
+  it("treats a row with non-finite/negative numeric fields as a cache miss, not a poisoned hit", async () => {
+    const good = makeRow();
+    const poisoned = makeRow({
+      path: "/fake/poisoned.jsonl",
+      turns: -5,
+      compactions: -1,
+      totals: {
+        tokens: {
+          inputUncached: 1e308,
+          cacheRead: 0,
+          cacheWrite5m: 0,
+          cacheWrite1h: 0,
+          output: 0,
+          contextTotal: 1e308,
+        },
+        cost: -50000.5,
+        priced: true,
+      },
+    });
+    const lines = [JSON.stringify(good), JSON.stringify(poisoned)].join("\n");
+    mkdirSync(dirname(cachePath), { recursive: true });
+    writeFileSync(cachePath, `${lines}\n`, "utf8");
+
+    const cache = await loadCache(cachePath);
+    // The healthy row still hits normally.
+    expect(cache.lookup(refFor(good))).toEqual(good);
+    // The poisoned row is skipped entirely — a lookup for it is a miss, never a hit that
+    // surfaces the negative/1e308 values.
+    expect(cache.lookup(refFor(poisoned))).toBeUndefined();
+  });
+
+  it("rejects non-finite (NaN/Infinity) numeric fields even though typeof is 'number'", async () => {
+    // Constructed directly rather than via JSON.stringify, since JSON has no NaN/Infinity
+    // literal — a hand-edited cache file could still carry these via a numeric parse of
+    // "1e999" (-> Infinity) or invalid math, so the raw JSON text below spells that out.
+    const badLine = JSON.stringify(makeRow()).replace(
+      '"cost":1.23',
+      '"cost":1e999',
+    );
+    mkdirSync(dirname(cachePath), { recursive: true });
+    writeFileSync(cachePath, `${badLine}\n`, "utf8");
+
+    const cache = await loadCache(cachePath);
+    expect(cache.lookup(refFor(makeRow()))).toBeUndefined();
+  });
+
   it("treats a totally unreadable/garbage file as an empty cache", async () => {
     mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(cachePath, "{{{ not even close to jsonl", "utf8");
@@ -204,6 +252,59 @@ describe("cache/totals", () => {
     expect(row.path).toBe(ref.path);
     expect(row.mtimeMs).toBe(ref.mtime.getTime());
     expect(row.size).toBe(ref.sizeBytes);
+  });
+});
+
+describe("cache/totals file permissions", () => {
+  let dir: string;
+  let cachePath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "peek-totals-cache-perms-"));
+    cachePath = join(dir, "nested", "totals-v1.jsonl");
+  });
+
+  it("creates the cache dir as 0700 and appends the cache file as 0600", async () => {
+    const cache = await loadCache(cachePath);
+    await cache.upsert([makeRow()]);
+    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("keeps the compacted (tmp+rename) cache file at 0600", async () => {
+    const cache = await loadCache(cachePath);
+    const row = makeRow();
+    // Same trigger as the "compacts the on-disk file" test above: repeated upserts of
+    // the same path push linesOnDisk past 2x live rows.
+    for (let i = 0; i < 5; i++) {
+      await cache.upsert([{ ...row, mtimeMs: row.mtimeMs + i }]);
+    }
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("tightens a pre-existing loosely-permissioned dir/file on write", async () => {
+    mkdirSync(dirname(cachePath), { recursive: true, mode: 0o755 });
+    writeFileSync(cachePath, "", "utf8");
+    chmodSync(dirname(cachePath), 0o755);
+    chmodSync(cachePath, 0o644);
+
+    const cache = await loadCache(cachePath);
+    await cache.upsert([makeRow()]);
+
+    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("tightens a pre-existing loosely-permissioned file/dir on load", async () => {
+    mkdirSync(dirname(cachePath), { recursive: true });
+    writeFileSync(cachePath, `${JSON.stringify(makeRow())}\n`, "utf8");
+    chmodSync(dirname(cachePath), 0o755);
+    chmodSync(cachePath, 0o644);
+
+    await loadCache(cachePath);
+
+    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
   });
 });
 

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="700" height="196" viewBox="0 0 700 196" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
   <rect width="700" height="196" rx="10" fill="#0d1117"/>
   <text x="24" y="30" fill="#e6edf3" font-size="16" font-weight="700">peek — measured, not modeled</text>
-  <text x="24" y="47" fill="#8b949e" font-size="11">self-hosted results; see docs/PERF.md and docs/PLAN-V2.md</text>
+  <text x="24" y="47" fill="#8b949e" font-size="11">self-hosted results; see docs/PERF.md and docs/DESIGN.md</text>
 
   <!-- pair 1: peek list, cold vs warm (totals cache) -->
   <text x="24" y="79" fill="#e6edf3" font-size="12">list, cold (11k-file corpus)</text>

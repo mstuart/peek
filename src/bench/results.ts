@@ -9,6 +9,12 @@
 // JSON.parse is reported as a warning, never thrown, and never discards the
 // rest of the file (spec: "loader tolerant of partial lines from crashed
 // runs").
+//
+// Content-on-disk boundary: append() redacts TrialResult.raw (the runner's
+// full harness result JSON, incl. the agent's response text) down to an
+// allowlist of cost/usage/error/timing fields before it hits this file — see
+// redactRaw below. results.jsonl lives in a directory users' own repos won't
+// gitignore by default.
 
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -16,6 +22,45 @@ import type { TrialResult } from "./types.js";
 
 export const DEFAULT_RESULTS_BASE_DIR = "bench-results";
 export const RESULTS_FILE_NAME = "results.jsonl";
+
+/** Keys from a claude-code runner's raw `--output-format json` result
+ * (runners/claude.ts) that are safe to persist to disk — cost/usage/error/
+ * timing metadata only, per docs/DESIGN.md's `permission_denials` mention.
+ * Everything else, notably `result` (the agent's full response text), is
+ * dropped by redactRaw below. */
+const RAW_SAFE_KEYS = new Set([
+  "type",
+  "subtype",
+  "session_id",
+  "is_error",
+  "stop_reason",
+  "duration_ms",
+  "duration_api_ms",
+  "num_turns",
+  "total_cost_usd",
+  "usage",
+  "modelUsage",
+  "permission_denials",
+]);
+
+/** Drops free-text fields — the agent's full response text (`result`) and
+ * anything else not on the allowlist above — from a trial's raw harness
+ * result JSON before it's written to disk. `bench-results/` is a directory
+ * users' own repos won't gitignore, and TrialResult.raw used to carry the
+ * complete claude result verbatim, response text included. Marks the row
+ * with `rawRedacted: true` so a reader can tell the field was intentionally
+ * trimmed rather than simply absent (e.g. a runner that never populated
+ * `raw`, or a crash before the result JSON was parsed). */
+function redactRaw(raw: unknown): unknown {
+  if (raw === undefined) return undefined;
+  const safe: Record<string, unknown> = { rawRedacted: true };
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (RAW_SAFE_KEYS.has(key)) safe[key] = value;
+    }
+  }
+  return safe;
+}
 
 /** ISO timestamp -> filesystem-safe directory name: colons and the
  * milliseconds dot aren't safe/pleasant across platforms, so both become
@@ -54,7 +99,10 @@ export async function createResultsWriter(
     dir,
     path: filePath,
     async append(result: TrialResult): Promise<void> {
-      await appendFile(filePath, `${JSON.stringify(result)}\n`, "utf8");
+      // Redact TrialResult.raw at the disk-write chokepoint (never in the
+      // in-memory TrialResult returned to callers) — see redactRaw above.
+      const persisted: TrialResult = { ...result, raw: redactRaw(result.raw) };
+      await appendFile(filePath, `${JSON.stringify(persisted)}\n`, "utf8");
     },
   };
 }

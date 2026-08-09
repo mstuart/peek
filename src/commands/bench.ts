@@ -38,6 +38,12 @@ import {
 import { claudeRunner } from "../bench/runners/claude.js";
 import { codexRunner } from "../bench/runners/codex.js";
 import { loadSuite } from "../bench/suite.js";
+import {
+  computeSuiteHash,
+  formatTrustPrompt,
+  isSuiteTrusted,
+  trustSuite,
+} from "../bench/trust.js";
 import type { BenchRunner } from "../bench/types.js";
 import { sweepOrphans } from "../bench/workspace.js";
 import type { HarnessId } from "../model/types.js";
@@ -250,8 +256,60 @@ export interface BenchRunCommandOptions {
   timeout?: number;
   maxCost?: number;
   yes?: boolean;
+  /** Trusts this suite (records its content hash) without the interactive trust prompt — the
+   * only way to get past a first-seen/changed suite non-interactively. Distinct from `--yes`,
+   * which only skips the cost-estimate confirm below and never bypasses the trust gate. */
+  trustSuite?: boolean;
   json?: boolean;
   repo?: string; // test-only escape hatch; defaults to process.cwd()
+  /** Test-only escape hatch: overrides the XDG trust-store path (see bench/trust.ts). */
+  trustStorePathOverride?: string;
+}
+
+/**
+ * Suite trust gate — runs BEFORE the cost estimate/`--yes` confirm, and `--yes` does not skip
+ * it (see bench/trust.ts header). A trusted hash (unchanged suite + config overlays) proceeds
+ * silently; a first-seen or changed suite either records trust via `--trust-suite` or prompts
+ * interactively; a non-interactive session without `--trust-suite` hard-aborts rather than
+ * silently running untrusted shell commands.
+ *
+ * Exported for tests only (bench-trust.test.ts's flag/TTY decision-matrix coverage, which needs
+ * to exercise this without running a real agent through the rest of runBenchRunCommand) —
+ * production callers go through runBenchRunCommand.
+ */
+export async function ensureSuiteTrusted(
+  options: BenchRunCommandOptions,
+  suite: Awaited<ReturnType<typeof loadSuite>>,
+  configA: ConfigVariant,
+  configB: ConfigVariant,
+): Promise<boolean> {
+  const hash = await computeSuiteHash(options.suite, [configA, configB]);
+  if (await isSuiteTrusted(hash, options.trustStorePathOverride)) {
+    return true;
+  }
+
+  if (options.trustSuite) {
+    await trustSuite(hash, options.suite, options.trustStorePathOverride);
+    return true;
+  }
+
+  process.stderr.write(
+    `${await formatTrustPrompt(options.suite, suite, [configA, configB])}\n`,
+  );
+  const trusted = await confirmRun("Trust this suite?"); // confirmRun appends " [y/N] " itself
+  if (!trusted) {
+    if (!process.stdin.isTTY) {
+      process.stderr.write(
+        "aborted — this suite is not yet trusted and stdin is not a TTY; re-run with --trust-suite to trust it non-interactively\n",
+      );
+    } else {
+      process.stderr.write("aborted — suite not trusted\n");
+    }
+    process.exitCode = 1;
+    return false;
+  }
+  await trustSuite(hash, options.suite, options.trustStorePathOverride);
+  return true;
 }
 
 export async function runBenchRunCommand(
@@ -267,6 +325,11 @@ export async function runBenchRunCommand(
     options.configA,
     options.configB,
   );
+
+  if (!(await ensureSuiteTrusted(options, suite, configA, configB))) {
+    return; // ensureSuiteTrusted already set process.exitCode and printed the abort reason
+  }
+
   const trials = options.trials ?? 1;
   const repoDir = options.repo ?? process.cwd();
 
@@ -440,7 +503,10 @@ export function registerBenchCommand(program: Command): void {
     .command("run")
     .description(
       "Run a task suite under two config variants and compare. Prints an upfront cost/run " +
-        "estimate and a confirm prompt (skip with --yes).",
+        "estimate and a confirm prompt (skip with --yes). A first-run or changed suite ALSO " +
+        "requires a separate trust confirmation (every setup/verify command shown verbatim) " +
+        "before anything executes — --yes does not skip this; use --trust-suite for " +
+        "non-interactive runs.",
     )
     .requiredOption(
       "--suite <dir>",
@@ -474,7 +540,15 @@ export function registerBenchCommand(program: Command): void {
       "abort BETWEEN trials once running parsed spend reaches this ceiling (best-effort)",
       parsePositiveNumber("--max-cost"),
     )
-    .option("--yes", "skip the confirm prompt")
+    .option(
+      "--yes",
+      "skip the cost-estimate confirm prompt (NOT the trust prompt below)",
+    )
+    .option(
+      "--trust-suite",
+      "trust this suite's content hash (setup/verify commands + config overlays) without " +
+        "the interactive prompt — required to run a first-seen/changed suite non-interactively",
+    )
     .option(
       "--json",
       "emit the full computed structure as JSON instead of a text table",
@@ -486,6 +560,7 @@ export function registerBenchCommand(program: Command): void {
           configA: opts.configA as string,
           configB: opts.configB as string,
           yes: Boolean(opts.yes),
+          trustSuite: Boolean(opts.trustSuite),
           json: Boolean(opts.json),
         };
         if (opts.harness !== undefined)

@@ -3,6 +3,7 @@
 // dedupTurns -> computeComposition -> finalizeCompactions -> priceSession ->
 // buildReportData -> renderReportHtml.
 
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -335,5 +336,78 @@ describe("renderDiffHtml", () => {
     expect(html).not.toContain("Loading the repo into cache for analysis");
     expect(html).not.toContain("flaky auth test");
     expect(html).not.toContain("blocking the v2 release");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --json-embed escaping (XSS fix): a field value containing "</script>"
+// must never close the embed's own <script> tag early.
+// ---------------------------------------------------------------------------
+
+describe("renderReportHtml — --json-embed script-breakout escaping", () => {
+  it("a cwd containing `</script><img onerror=...>` cannot break out of the embed block", async () => {
+    const session = await processedClaudeSession("compaction");
+    const payload = '</script><img src=x onerror="alert(1)">';
+    const data = buildReportData(
+      { ...session, cwd: payload },
+      new Date("2026-08-08T00:00:00.000Z"),
+      "0.1.0",
+    );
+    const html = renderReportHtml(data, { jsonEmbed: true });
+
+    assertWellFormed(html);
+    // Exactly one literal "</script>" in the whole document: the embed
+    // block's own closing tag. If the payload's "</script>" had survived
+    // unescaped inside the JSON text, this would be 2.
+    expect(countOccurrences(html, "</script>")).toBe(1);
+    // No live <img> element anywhere — the payload only ever appears as
+    // escaped text (HTML-entity-escaped in the header row, <-escaped
+    // inside the JSON embed).
+    expect(html).not.toContain("<img");
+
+    // The parsed-back JSON still round-trips the original value exactly —
+    // the escape is reversible, not lossy.
+    const match = html.match(
+      /<script type="application\/json" id="peek-report-data">([\s\S]*?)<\/script>/,
+    );
+    expect(match).not.toBeNull();
+    const embedded = JSON.parse(match?.[1] ?? "");
+    expect(embedded.cwd).toBe(payload);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Working-directory row: shortened, not the raw absolute path (path
+// disclosure fix).
+// ---------------------------------------------------------------------------
+
+describe("renderReportHtml — Working directory row is shortened", () => {
+  it("a cwd under the real home directory renders with a ~ prefix, not the raw home path", async () => {
+    const session = await processedClaudeSession("compaction");
+    const cwd = `${homedir()}/git/some-project`;
+    const data = buildReportData(
+      { ...session, cwd },
+      new Date("2026-08-08T00:00:00.000Z"),
+      "0.1.0",
+    );
+    const html = renderReportHtml(data);
+
+    expect(html).toContain("~/git/some-project");
+    expect(html).not.toContain(homedir());
+  });
+
+  it("a long path outside home is mid-truncated rather than shown in full", async () => {
+    const session = await processedClaudeSession("compaction");
+    const cwd =
+      "/very/deeply/nested/path/that/goes/on/for/a/very/long/while/project";
+    const data = buildReportData(
+      { ...session, cwd },
+      new Date("2026-08-08T00:00:00.000Z"),
+      "0.1.0",
+    );
+    const html = renderReportHtml(data);
+
+    expect(html).not.toContain(cwd);
+    expect(html).toContain("…");
   });
 });

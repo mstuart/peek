@@ -4,14 +4,16 @@
 // tests write fixture files directly under a tmp dir.
 
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { priceTurn } from "../../src/engine/accounting.js";
 import type {
@@ -90,6 +92,25 @@ const SAMPLE_PAYLOAD = {
     },
   },
 };
+
+/** A payload past the MIN_EXPECTED_MODELS floor — shared by refreshPricingSnapshot
+ * tests that need a valid (non-rejected) fetch response. */
+function makeValidBigPayload(): Record<string, unknown> {
+  const padded: Record<
+    string,
+    { id: string; cost: { input: number; output: number } }
+  > = {};
+  for (let i = 0; i < 150; i++) {
+    padded[`synthetic-model-${i}`] = {
+      id: `synthetic-model-${i}`,
+      cost: { input: 1, output: 2 },
+    };
+  }
+  return {
+    anthropic: SAMPLE_PAYLOAD.anthropic,
+    padding: { id: "padding", models: padded },
+  };
+}
 
 describe("mapModelsDevPayload", () => {
   const models = mapModelsDevPayload(SAMPLE_PAYLOAD);
@@ -245,6 +266,186 @@ describe("loadCachedModelsDevSnapshot + lookupWithFallback", () => {
       lookupWithFallback("anything", { modelsDevSnapshot: null }),
     ).toBeNull();
   });
+
+  it("tightens a pre-existing loosely-permissioned snapshot file/dir on load", () => {
+    const dir = mkdtempSync(join(tmpdir(), "peek-modelsdev-perms-"));
+    const cachePath = join(dir, "models-dev.json");
+    writeSnapshotFile(cachePath);
+    chmodSync(dir, 0o755);
+    chmodSync(cachePath, 0o644);
+
+    expect(loadCachedModelsDevSnapshot(cachePath)).not.toBeNull();
+
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("drops a poisoned model leaf (non-numeric input) but keeps other valid entries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "peek-modelsdev-poison-"));
+    const cachePath = join(dir, "models-dev.json");
+    writeSnapshotFile(cachePath, {
+      models: {
+        "poisoned-model": {
+          input: "not-a-number",
+          output: 2e-6,
+          cacheRead: null,
+          cacheCreation5m: null,
+          cacheCreation1h: null,
+          tiering: null,
+        },
+        "healthy-model": {
+          input: 1e-6,
+          output: 2e-6,
+          cacheRead: null,
+          cacheCreation5m: null,
+          cacheCreation1h: null,
+          tiering: null,
+        },
+      },
+    });
+
+    const snapshot = loadCachedModelsDevSnapshot(cachePath);
+    expect(snapshot).not.toBeNull();
+    expect(
+      lookupWithFallback("poisoned-model", { modelsDevSnapshot: snapshot }),
+    ).toBeNull();
+    expect(
+      lookupWithFallback("healthy-model", { modelsDevSnapshot: snapshot }),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["NaN via non-numeric input", { input: "NaN", output: 2e-6 }],
+    ["negative input", { input: -1e-6, output: 2e-6 }],
+    [
+      "negative nullable cacheRead",
+      { input: 1e-6, output: 2e-6, cacheRead: -1 },
+    ],
+    [
+      "malformed tiering",
+      {
+        input: 1e-6,
+        output: 2e-6,
+        tiering: { thresholdTokens: 200_000, input: -1 },
+      },
+    ],
+  ])("drops a model leaf with %s", (_label, badFields) => {
+    const dir = mkdtempSync(join(tmpdir(), "peek-modelsdev-poison2-"));
+    const cachePath = join(dir, "models-dev.json");
+    writeSnapshotFile(cachePath, {
+      models: {
+        "bad-model": {
+          cacheRead: null,
+          cacheCreation5m: null,
+          cacheCreation1h: null,
+          tiering: null,
+          ...badFields,
+        },
+      },
+    });
+
+    const snapshot = loadCachedModelsDevSnapshot(cachePath);
+    expect(snapshot).not.toBeNull();
+    expect(
+      lookupWithFallback("bad-model", { modelsDevSnapshot: snapshot }),
+    ).toBeNull();
+  });
+
+  it("drops a model leaf whose input overflows to Infinity when the raw JSON is parsed", () => {
+    // JSON.stringify(Infinity) serializes to `null`, so this scenario (a disk-level numeral
+    // large enough to overflow float64 on parse, e.g. from a hand-edited cache file) has to be
+    // written as raw JSON text rather than built from a JS Infinity literal.
+    const dir = mkdtempSync(join(tmpdir(), "peek-modelsdev-poison-inf-"));
+    const cachePath = join(dir, "models-dev.json");
+    writeFileSync(
+      cachePath,
+      JSON.stringify({
+        fetchedAt: new Date().toISOString(),
+        models: { "bad-model": { input: 0, output: 2e-6 } },
+      }).replace('"input":0', '"input":1e400'),
+    );
+
+    const snapshot = loadCachedModelsDevSnapshot(cachePath);
+    expect(snapshot).not.toBeNull();
+    expect(
+      lookupWithFallback("bad-model", { modelsDevSnapshot: snapshot }),
+    ).toBeNull();
+  });
+
+  it("priceTurn never returns priced:true with a non-finite cost for a poisoned cache entry", () => {
+    const dir = mkdtempSync(join(tmpdir(), "peek-modelsdev-poison-priceturn-"));
+    process.env.XDG_CACHE_HOME = dir;
+    mkdirSync(join(dir, "peek"), { recursive: true });
+    writeFileSync(
+      join(dir, "peek", "models-dev.json"),
+      JSON.stringify({
+        fetchedAt: new Date().toISOString(),
+        models: {
+          "poisoned-repro-model": {
+            input: "not-a-number",
+            output: 2e-6,
+            cacheRead: null,
+            cacheCreation5m: null,
+            cacheCreation1h: null,
+            tiering: null,
+          },
+        },
+      }),
+    );
+
+    const usage: NormalizedUsage = {
+      inputUncached: 1000,
+      cacheRead: 0,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+      output: 500,
+      raw: undefined,
+    };
+    const turn: Turn = {
+      role: "assistant",
+      model: "poisoned-repro-model",
+      timestamp: new Date(0),
+      contentSpans: [],
+      usage,
+      contextTotal: 1000,
+      composition: {
+        categories: {
+          userText: 0,
+          assistantText: 0,
+          thinking: 0,
+          toolResults: 0,
+          toolCallArgs: 0,
+          instructionInjection: 0,
+          systemPrompt: 0,
+          toolSchemas: 0,
+          compactionSummaries: 0,
+          coordination: 0,
+        },
+        residual: 0,
+        residualShare: 0,
+        truncated: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite5m: 0,
+        cacheWrite1h: 0,
+        total: 0,
+        mode: "auto",
+        priced: false,
+      },
+    };
+
+    const cost = priceTurn(turn, { mode: "calculate" });
+    // The poisoned entry was dropped at the cache-validation layer, so this degrades to an
+    // honest unpriced zero — never priced:true with a NaN total.
+    expect(cost.priced).toBe(false);
+    expect(cost.total).toBe(0);
+    expect(Number.isNaN(cost.total)).toBe(false);
+
+    Reflect.deleteProperty(process.env, "XDG_CACHE_HOME");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -367,21 +568,7 @@ describe("refreshPricingSnapshot", () => {
   it("writes the cache file and reports counts on a valid payload", async () => {
     const dir = mkdtempSync(join(tmpdir(), "peek-refresh-ok-"));
     const cachePath = join(dir, "models-dev.json");
-    const bigPayload: Record<string, unknown> = {
-      anthropic: SAMPLE_PAYLOAD.anthropic,
-    };
-    // Pad past the 100-model floor with synthetic priced entries under a throwaway provider.
-    const padded: Record<
-      string,
-      { id: string; cost: { input: number; output: number } }
-    > = {};
-    for (let i = 0; i < 150; i++) {
-      padded[`synthetic-model-${i}`] = {
-        id: `synthetic-model-${i}`,
-        cost: { input: 1, output: 2 },
-      };
-    }
-    bigPayload.padding = { id: "padding", models: padded };
+    const bigPayload = makeValidBigPayload();
 
     const fetchImpl: FetchLike = async () => ({
       ok: true,
@@ -415,5 +602,21 @@ describe("refreshPricingSnapshot", () => {
       refreshPricingSnapshot({ fetchImpl, cachePathOverride: cachePath }),
     ).rejects.toThrow(/only 1 priced model/);
     expect(existsSync(cachePath)).toBe(false);
+  });
+
+  it("writes the cache dir as 0700 and the cache file as 0600", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "peek-refresh-perms-"));
+    const cachePath = join(dir, "nested", "models-dev.json");
+    const fetchImpl: FetchLike = async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => makeValidBigPayload(),
+    });
+
+    await refreshPricingSnapshot({ fetchImpl, cachePathOverride: cachePath });
+
+    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
+    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
   });
 });

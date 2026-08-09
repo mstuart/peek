@@ -43,6 +43,7 @@
 //     the boundary this file enforces.
 
 import type { DiffReport } from "../commands/diff.js";
+import { shortenCwd } from "../model/format.js";
 import type { CompositionCategory, HarnessId } from "../model/types.js";
 import { formatNumber } from "./table.js";
 
@@ -421,7 +422,7 @@ function buildHeader(data: ReportData): string {
       <dl class="meta">
         <div><dt>Harness</dt><dd>${esc(data.harness)} (${esc(data.harnessVersion)})</dd></div>
         <div><dt>Session</dt><dd>${esc(data.sessionId)}</dd></div>
-        <div><dt>Working directory</dt><dd>${esc(data.cwd)}</dd></div>
+        <div><dt>Working directory</dt><dd>${esc(shortenCwd(data.cwd))}</dd></div>
         <div><dt>Model(s)</dt><dd>${esc(data.models.join(", "))}</dd></div>
         <div><dt>Started</dt><dd>${esc(data.startedAtISO)}</dd></div>
         <div><dt>Duration</dt><dd>${esc(data.durationLabel)}</dd></div>
@@ -716,9 +717,13 @@ function buildJsonEmbed(
   enabled: boolean | undefined,
 ): string {
   if (!enabled) return "";
-  // application/json — never executed as script by any browser; safe to
-  // embed the full (already-sanitized) report structure verbatim.
-  return `<script type="application/json" id="peek-report-data">${JSON.stringify(data)}</script>`;
+  // application/json — never executed as script by any browser, but a
+  // field value containing a literal "</script>" (e.g. a session-log-
+  // originated cwd) would still close this tag early and let anything
+  // after it run as live HTML. Standard JSON-in-script escape: \u003c also
+  // neutralizes "<!--"/"<script" sequences a parser could act on before
+  // the closing tag. JSON.parse reverses it losslessly (it's just "<").
+  return `<script type="application/json" id="peek-report-data">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
 }
 
 // ---------------------------------------------------------------------------

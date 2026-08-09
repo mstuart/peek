@@ -17,7 +17,9 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { SessionRef } from "../../model/types.js";
 
-const DEFAULT_ROOT = path.join(homedir(), ".claude", "projects");
+// Exported so commands/shared.ts's "no sessions found" messages can name the
+// concrete root actually checked instead of a vague "check discovery roots".
+export const DEFAULT_ROOT = path.join(homedir(), ".claude", "projects");
 
 // The real slug format maps BOTH "/" and "-" in the source cwd to "-", so this decode
 // is lossy and best-effort — it exists for display only, never re-derive a real path from it.

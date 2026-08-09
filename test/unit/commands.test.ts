@@ -25,7 +25,12 @@ import {
   loadPricedSession,
   runCostCommand,
 } from "../../src/commands/cost.js";
-import { type ListEntry, buildListReport } from "../../src/commands/list.js";
+import {
+  DEFAULT_LIST_LIMIT,
+  type ListEntry,
+  buildListReport,
+  runListCommand,
+} from "../../src/commands/list.js";
 import { resolveSessionRef } from "../../src/commands/shared.js";
 import { priceSession } from "../../src/engine/accounting.js";
 import {
@@ -215,6 +220,98 @@ describe("buildListReport", () => {
     });
     expect(withSubagents.rows).toHaveLength(refs.length);
     expect(withSubagents.rows.some((r) => r.kind === "subagent")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `peek list` --limit / "no sessions found" root-naming (install-gauntlet
+// CLI UX fixes). Real-but-empty dirs for codex/pi so discovery doesn't fall
+// back to the real home-directory roots — same isolation trick as `peek
+// cost --all --by`'s CLAUDE_ROOTS_ONLY below.
+// ---------------------------------------------------------------------------
+
+describe("runListCommand — --limit / empty-results messaging", () => {
+  const emptyDir = mkdtempSync(join(tmpdir(), "peek-list-limit-test-"));
+  const CLAUDE_ROOTS_ONLY = {
+    "claude-code": [CLAUDE_FIXTURES_ROOT],
+    codex: [emptyDir],
+    pi: [emptyDir],
+  };
+  // v2.1.225's fixture tree alone has main+subagent refs mixed in with the
+  // other fixture dirs under CLAUDE_FIXTURES_ROOT; what matters here is only
+  // that main-session count comfortably straddles a small --limit.
+  const ALL_EMPTY_ROOTS = {
+    "claude-code": [emptyDir],
+    codex: [emptyDir],
+    pi: [emptyDir],
+  };
+
+  async function runAndCapture(
+    opts: Partial<Parameters<typeof runListCommand>[0]>,
+  ): Promise<{ stdout: string }> {
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let written = "";
+    process.stdout.write = ((chunk: string) => {
+      written += chunk;
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await runListCommand({ roots: CLAUDE_ROOTS_ONLY, ...opts });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    return { stdout: written };
+  }
+
+  it("truncates the text table to --limit and prints a hint naming the remaining count", async () => {
+    const { stdout } = await runAndCapture({ limit: 5 });
+    const dataLines = stdout
+      .trim()
+      .split("\n")
+      .filter((l) => !l.startsWith("harness") && !l.startsWith("…"));
+    expect(dataLines).toHaveLength(5);
+    expect(stdout).toMatch(
+      /…and 7 more sessions \(use --limit <n> or --limit 0 for all\)/,
+    );
+  });
+
+  it("--limit 0 prints every row with no truncation hint", async () => {
+    const { stdout } = await runAndCapture({ limit: 0 });
+    expect(stdout).not.toMatch(/more session/);
+    const dataLines = stdout
+      .trim()
+      .split("\n")
+      .filter((l) => !l.startsWith("harness") && !l.startsWith("…"));
+    expect(dataLines).toHaveLength(12); // all main sessions in the fixture tree
+  });
+
+  it("default limit (DEFAULT_LIST_LIMIT) shows no hint when under the cap", async () => {
+    expect(DEFAULT_LIST_LIMIT).toBe(50);
+    const { stdout } = await runAndCapture({});
+    expect(stdout).not.toMatch(/more session/);
+  });
+
+  it("--json ignores --limit entirely — always the full report", async () => {
+    const { stdout } = await runAndCapture({ limit: 1, json: true });
+    const report = JSON.parse(stdout) as { rows: unknown[] };
+    expect(report.rows).toHaveLength(12);
+  });
+
+  it("empty results (exit-0 case) name the concrete roots that were checked", async () => {
+    const { stdout } = await runAndCapture({ roots: ALL_EMPTY_ROOTS });
+    expect(stdout).toMatch(/no sessions found/);
+    // All three roots resolved to the same tmp dir here, but the message
+    // must be built from the actual resolved roots, not a hardcoded string.
+    expect(stdout).toContain(emptyDir);
+  });
+
+  it("empty results scoped by --harness only name that harness's root", async () => {
+    const { stdout } = await runAndCapture({
+      roots: ALL_EMPTY_ROOTS,
+      harness: "codex",
+    });
+    expect(stdout).toContain(emptyDir);
+    expect(stdout).not.toMatch(/claude-code|pi/);
   });
 });
 
@@ -701,5 +798,21 @@ describe("resolveSessionRef short-id prefix (real-data verification fix)", () =>
         roots: { "claude-code": ["test/fixtures/claude-code"] },
       }),
     ).rejects.toThrow(/ambiguous session id prefix/);
+  });
+});
+
+describe("resolveSessionRef — unresolvable-target message names the checked roots", () => {
+  it("no argument + nothing discovered: error names all three (test-override) roots", async () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), "peek-resolve-empty-test-"));
+    const roots = {
+      "claude-code": [emptyDir],
+      codex: [emptyDir],
+      pi: [emptyDir],
+    };
+    await expect(resolveSessionRef(undefined, { roots })).rejects.toThrow(
+      new RegExp(
+        `no sessions found.*${emptyDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+      ),
+    );
   });
 });

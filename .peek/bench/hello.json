@@ -1,0 +1,4 @@
+{ "name": "hello-file",
+  "prompt": "Create a file named HELLO.txt in the current directory containing exactly the single line: hello from bench. Then stop.",
+  "verify": "grep -q 'hello from bench' HELLO.txt",
+  "timeoutS": 300 }

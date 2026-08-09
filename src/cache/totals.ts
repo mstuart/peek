@@ -21,7 +21,7 @@
 // line, which the corruption-safe reader above skips (a lost cache row, not
 // a crash).
 
-import { appendFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -64,6 +64,16 @@ export function toCacheRow(ref: SessionRef, session: Session): TotalsCacheRow {
 
 const HARNESS_IDS = new Set<HarnessId>(["claude-code", "codex", "pi"]);
 
+/** Tokens/turns/compactions/cost must be finite, non-negative numbers — a hand-edited or
+ * corrupted cache line can carry `typeof === "number"` values like `1e308`, `-5`, `NaN`, or
+ * `Infinity` (all valid JSON) that would otherwise flow straight through to `peek list`'s
+ * output verbatim. A row failing this check is treated as a cache miss (see the `isValidRow`
+ * call site in loadCache below), forcing a re-parse from the source session file rather than
+ * ever surfacing the poisoned values. */
+function isFiniteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 function isValidRow(value: unknown): value is TotalsCacheRow {
   if (typeof value !== "object" || value === null) return false;
   const r = value as Record<string, unknown>;
@@ -72,8 +82,8 @@ function isValidRow(value: unknown): value is TotalsCacheRow {
   if (typeof r.size !== "number") return false;
   if (typeof r.harness !== "string" || !HARNESS_IDS.has(r.harness as HarnessId))
     return false;
-  if (typeof r.turns !== "number") return false;
-  if (typeof r.compactions !== "number") return false;
+  if (!isFiniteNonNegative(r.turns)) return false;
+  if (!isFiniteNonNegative(r.compactions)) return false;
   if (typeof r.startedAt !== "string") return false;
   if (typeof r.endedAt !== "string") return false;
   if (typeof r.cwd !== "string") return false;
@@ -81,7 +91,7 @@ function isValidRow(value: unknown): value is TotalsCacheRow {
 
   if (typeof r.totals !== "object" || r.totals === null) return false;
   const totals = r.totals as Record<string, unknown>;
-  if (typeof totals.cost !== "number") return false;
+  if (!isFiniteNonNegative(totals.cost)) return false;
   if (typeof totals.priced !== "boolean") return false;
   if (typeof totals.tokens !== "object" || totals.tokens === null) return false;
   const tokens = totals.tokens as Record<string, unknown>;
@@ -94,7 +104,7 @@ function isValidRow(value: unknown): value is TotalsCacheRow {
     "contextTotal",
   ] as const;
   for (const key of tokenKeys) {
-    if (typeof tokens[key] !== "number") return false;
+    if (!isFiniteNonNegative(tokens[key])) return false;
   }
   return true;
 }
@@ -104,6 +114,27 @@ function resolveCachePath(override?: string): string {
   if (override) return override;
   const base = process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache");
   return path.join(base, "peek", "totals-v1.jsonl");
+}
+
+// Cache rows carry usernames and project paths (session cwd, session ids derived from
+// filenames) — the peek cache dir and everything in it is tightened to owner-only
+// (0700 dir / 0600 files) to avoid leaking that to other accounts on a shared machine.
+// mkdir's/writeFileSync's `mode` option only takes effect for a path that doesn't yet
+// exist, so an explicit chmod after every create/write (and on load, for a
+// pre-existing file/dir left loose by a peek version predating this fix) is required
+// to actually guarantee the tightened mode rather than merely requesting it.
+const CACHE_DIR_MODE = 0o700;
+const CACHE_FILE_MODE = 0o600;
+
+/** Best-effort chmod — failure (missing path, unsupported filesystem, permissions we
+ * don't own) is silently ignored: this is host-local convenience cache state, not
+ * something a failed chmod should ever crash the CLI over. */
+function tightenPerms(targetPath: string, mode: number): void {
+  try {
+    chmodSync(targetPath, mode);
+  } catch {
+    // best-effort — ignore
+  }
 }
 
 export interface TotalsCache {
@@ -149,9 +180,15 @@ class TotalsCacheImpl implements TotalsCache {
 
     for (const row of newRows) this.rows.set(row.path, row);
 
-    await mkdir(path.dirname(this.cachePath), { recursive: true });
+    const dir = path.dirname(this.cachePath);
+    await mkdir(dir, { recursive: true, mode: CACHE_DIR_MODE });
+    tightenPerms(dir, CACHE_DIR_MODE);
     const lines = `${newRows.map((r) => JSON.stringify(r)).join("\n")}\n`;
-    appendFileSync(this.cachePath, lines, "utf8");
+    appendFileSync(this.cachePath, lines, {
+      encoding: "utf8",
+      mode: CACHE_FILE_MODE,
+    });
+    tightenPerms(this.cachePath, CACHE_FILE_MODE);
     this.linesOnDisk += newRows.length;
 
     if (this.linesOnDisk > this.rows.size * 2) {
@@ -166,7 +203,11 @@ class TotalsCacheImpl implements TotalsCache {
     const body = [...this.rows.values()]
       .map((r) => JSON.stringify(r))
       .join("\n");
-    writeFileSync(tmpPath, body.length > 0 ? `${body}\n` : "", "utf8");
+    writeFileSync(tmpPath, body.length > 0 ? `${body}\n` : "", {
+      encoding: "utf8",
+      mode: CACHE_FILE_MODE,
+    });
+    tightenPerms(tmpPath, CACHE_FILE_MODE); // chmod before rename, per the header note above
     renameSync(tmpPath, this.cachePath);
     this.linesOnDisk = this.rows.size;
   }
@@ -186,6 +227,10 @@ export async function loadCache(
 
   try {
     const raw = await readFile(cachePath, "utf8");
+    // File existed and was readable — tighten it (and its dir) in case it was left
+    // loose by a peek version predating this fix, or by umask on plain creation.
+    tightenPerms(cachePath, CACHE_FILE_MODE);
+    tightenPerms(path.dirname(cachePath), CACHE_DIR_MODE);
     for (const line of raw.split("\n")) {
       if (line.trim() === "") continue;
       lineCount++;
