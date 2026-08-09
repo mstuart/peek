@@ -33,9 +33,7 @@
     "type": "git",
     "url": "git+https://github.com/mstuart/peek.git"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsup",
     "prepare": "npm run build",
