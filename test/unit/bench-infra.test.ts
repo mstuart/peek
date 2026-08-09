@@ -1,4 +1,4 @@
-// Lane A1 gate (docs/DESIGN.md § Lane A "Design") — unit tests for the
+// Lane A1 gate (docs/DESIGN.md § Bench design) — unit tests for the
 // four bench-infra modules: proc.ts (spawn/timeout/group-kill contract),
 // suite.ts (task-file loading + validation), config.ts (variant overlay),
 // workspace.ts (worktree/copy lifecycle + orphan sweep). Mirrors

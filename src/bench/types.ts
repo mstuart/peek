@@ -1,4 +1,4 @@
-// Bench (v2 Lane A, docs/DESIGN.md § "Lane A — `peek bench`") shared types.
+// Bench (v2 Lane A, docs/DESIGN.md § Bench design) shared types.
 //
 // Transcribed verbatim from DESIGN.md's "Canonical runner interface
 // (implementation contract — workers build against this verbatim)" block,

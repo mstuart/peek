@@ -1,5 +1,4 @@
-// A4 gate (docs/DESIGN.md § Lane A "peek bench: config A/B regression
-// runner", task A4) — covers:
+// A4 gate (docs/DESIGN.md § Bench design, task A4) — covers:
 //   - compare.ts: median/success-rate/delta arithmetic, including the
 //     missing-totals honesty convention.
 //   - results.ts: writer/reader round-trip, torn-last-line tolerance.

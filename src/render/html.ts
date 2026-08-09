@@ -1,4 +1,4 @@
-// `peek report` (T5.2) — docs/DESIGN.md § "CLI surface (v1)": self-contained
+// `peek report` (T5.2) — docs/DESIGN.md § "CLI surface": self-contained
 // shareable HTML artifact. Pure string-building only: renderReportHtml takes
 // a fully-computed ReportData and returns one HTML document. No I/O, no
 // network, no external URLs (fonts/CDN/scripts) — the file must render
@@ -25,7 +25,7 @@
 // hue with a diagonal hatch overlay rather than stepping outside the
 // validated set — documented tradeoff, not an oversight.
 //
-// v2 additions (Lane E, docs/DESIGN.md § "Lane E — report v2"):
+// v2 additions (Lane E, docs/DESIGN.md § Other v2 subsystems "Report v2"):
 //   - ReportCompositionTurn.spans: per-turn span-level rows (category/
 //     toolName/mcpServer/~tokens/truncated ONLY — same sanitization
 //     boundary as everything else in this file; Span.text never reaches
