@@ -368,7 +368,7 @@ describe("README Bench safety paragraph", () => {
   it("documents that --yes does not bypass the trust requirement", () => {
     const readmePath = join(process.cwd(), "README.md");
     const readme = readFileSync(readmePath, "utf8");
-    const safetyParagraphStart = readme.indexOf("**Safety, by design:**");
+    const safetyParagraphStart = readme.indexOf("**Not a sandbox.**");
     expect(safetyParagraphStart).toBeGreaterThan(-1);
     const paragraphEnd = readme.indexOf("\n\n", safetyParagraphStart);
     const paragraph = readme.slice(safetyParagraphStart, paragraphEnd);
