@@ -182,7 +182,7 @@ describe("parsePiEntryTree — System A", () => {
 });
 
 describe("parsePiEntryTree — System B detection", () => {
-  // Lane D (docs/DESIGN.md): System B is now a supported, fully-parsed
+  // Lane D (docs/DESIGN.md § Other v2 subsystems): System B is now a supported, fully-parsed
   // format (src/adapters/pi/systemB.ts) — parsePiEntryTree's job here is
   // purely to detect (route to systemB.ts) and signal that, with no warning
   // of its own; systemB.ts's own parse warnings are covered in

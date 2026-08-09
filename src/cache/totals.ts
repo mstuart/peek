@@ -1,4 +1,4 @@
-// Totals cache (v2 PLAN Lane B, docs/DESIGN.md + docs/PERF.md fix #3) — the
+// Totals cache (v2 PLAN Lane B, docs/DESIGN.md § Other v2 subsystems + docs/PERF.md fix #3) — the
 // durable answer to `peek list`'s cold-parse floor. One row per session
 // file, keyed by (path, mtimeMs, size): a stat-only match skips the full
 // parse+dedup+price pipeline entirely. Schema-versioned by FILENAME

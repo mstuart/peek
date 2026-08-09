@@ -325,7 +325,7 @@ describe("parsePiSession — case 5: forked session", () => {
 });
 
 describe("parsePiSession — case 6: System B (harness v4)", () => {
-  // Lane D (docs/DESIGN.md): System B is now fully parsed, not
+  // Lane D (docs/DESIGN.md § Other v2 subsystems): System B is now fully parsed, not
   // detect-and-skipped — this fixture grew from a 4-line detection-only stub
   // into a realistic session (src/adapters/pi/systemB.ts). Full coverage
   // (turn count, usage, compaction, lane handling, unknown-kind warning,

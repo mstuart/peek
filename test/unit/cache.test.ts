@@ -1,4 +1,4 @@
-// Lane B (docs/DESIGN.md) gate — cache/totals.ts unit tests + list pipeline
+// Lane B (docs/DESIGN.md § Other v2 subsystems) gate — cache/totals.ts unit tests + list pipeline
 // integration. Mirrors test/unit/commands.test.ts's fixture-loading
 // conventions where relevant.
 

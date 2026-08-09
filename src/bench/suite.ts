@@ -1,4 +1,4 @@
-// Bench task suite loader (docs/DESIGN.md § Lane A "Task suite"). Reads
+// Bench task suite loader (docs/DESIGN.md § Bench design "Task suite"). Reads
 // `.peek/bench/*.json` — one task per file, JSON (not YAML — zero new
 // runtime deps per the spec). `verify` exit 0 = success; there is no
 // LLM-judge in v2.0, so `verify` is required same as `prompt`/`name`.

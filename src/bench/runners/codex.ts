@@ -1,4 +1,4 @@
-// codex bench runner (Lane A, task A3). docs/DESIGN.md § "Lane A" > "Trial isolation".
+// codex bench runner (Lane A, task A3). docs/DESIGN.md § Bench design > "Trial isolation".
 
 import type { Dirent } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";

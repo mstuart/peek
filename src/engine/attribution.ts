@@ -296,7 +296,7 @@ function byMcpServerFromTurns(turns: readonly Turn[]): McpServerAttribution[] {
 
 // ---------------------------------------------------------------------------
 // mergeAttribution — cross-session byModel/byTool/byMcpServer merge
-// (docs/DESIGN.md Lane C: `peek cost --all`).
+// (docs/DESIGN.md § Other v2 subsystems, Lane C: `peek cost --all`).
 // ---------------------------------------------------------------------------
 
 /**

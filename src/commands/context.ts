@@ -1,4 +1,4 @@
-// `peek context` (T3.2) — docs/DESIGN.md § "CLI surface (v1)": historical
+// `peek context` (T3.2) — docs/DESIGN.md § "CLI surface": historical
 // per-turn composition, residual honestly labeled.
 //
 // Two halves, deliberately separated for testability (standing worker rule
