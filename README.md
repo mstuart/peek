@@ -8,6 +8,7 @@
   <a href="https://github.com/mstuart/peek/actions/workflows/ci.yml"><img src="https://github.com/mstuart/peek/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node >=20">
+  <!-- BADGES: deepwiki + socket to be inserted (verified URLs pending research-badges) -->
 </p>
 
 <p align="center">
@@ -23,7 +24,7 @@
 
 peek parses the session logs your coding agent already writes to disk — Claude Code, Codex, pi — no live instrumentation, no proxying, no telemetry. Three properties make it different:
 
-- **Exact totals, never re-tokenized** — every number comes straight from each harness's own usage fields; peek's totals reconcile against ccusage at 0.00% delta on every component, including cost, at matched scope.
+- **Exact totals, never re-tokenized** — every number comes straight from each harness's own usage fields; peek's totals reconcile against [ccusage](https://github.com/ccusage/ccusage) at 0.00% delta on every component, including cost, at matched scope.
 - **Honest composition, not vibes** — categories are labeled `~` when estimated and exact when not, the residual is named ("system prompt + tool schemas + framing (not logged by this harness)") instead of hidden, and hypotheses that don't hold up — Codex's original "near-exact" composition claim — get published as refuted, not quietly dropped.
 - **Config A/B with real agents** — `peek bench` re-runs your own task suite under two config variants and diffs the results using peek's own accounting; the self-hosted demo below is a real run, not a projection.
 
@@ -54,7 +55,7 @@ Every number below is measured, not estimated — reproduce with the pointer in 
 
 ## Compared to
 
-The honest bar is native tooling — Claude Code's own `/context` and `/usage` already do live composition and attribution for free, and peek never demos against them; its edge is *historical* analysis (sessions that already ended) across three harnesses `/context` doesn't reach at all.¹
+The honest bar is native tooling — Claude Code's own [`/context`](https://code.claude.com/docs/en/context-window) and [`/usage`](https://code.claude.com/docs/en/costs#track-your-costs) already do live composition and attribution for free, and peek never demos against them; its edge is *historical* analysis (sessions that already ended) across three harnesses `/context` doesn't reach at all.¹
 
 | | Live context view | Historical composition | Cross-harness | Compaction analysis | Cost attribution depth | Session diff | CLI + JSON |
 |---|---|---|---|---|---|---|---|
@@ -289,7 +290,7 @@ peek reads the session logs your coding agent already writes to disk — no live
 
 peek's totals are cross-checked against ccusage: identical to the token (0.00% delta on every component, including cost) at matched scope. The one scope difference found, corpus-wide dedup vs. peek's per-file dedup on multi-subagent sessions, is documented and fixed.
 
-Everything runs locally. Session logs never leave your machine, there is no telemetry, and network access is limited to the explicit opt-in `peek pricing refresh` command (fetches a fresh models.dev pricing snapshot for the offline fallback lookup — see `src/pricing/refresh.ts`; nothing else in peek touches the network). Only synthetic fixtures ship in this repo.
+Everything runs locally. Session logs never leave your machine, there is no telemetry, and network access is limited to the explicit opt-in `peek pricing refresh` command (fetches a fresh [models.dev](https://models.dev) pricing snapshot for the offline fallback lookup — see `src/pricing/refresh.ts`; nothing else in peek touches the network). Only synthetic fixtures ship in this repo.
 
 ## Status & limitations
 
