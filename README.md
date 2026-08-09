@@ -106,7 +106,7 @@ hello-file  1/1 (100%)  1/1 (100%)  +1.1s (+13.5%)   -15,864 (-19.1%)   -$0.54 (
 
 Both configs passed `verify`; switching to haiku cut cost 93.4% for +1.1s wall — a real run, not a projection.
 
-**Not a sandbox.** A worktree is a filesystem convention, not a security boundary — trial agents run with your OS permissions, so only bench task suites you trust. A first-run or changed suite requires explicit trust confirmation (every command shown verbatim, direnv-style); `--yes` skips the cost estimate but never the trust prompt. Per harness: **claude-code** is fully gated (the result above); **codex** has a runner verified with a real trial but no orchestrated A/B yet; **pi** is deferred to v2.1.
+**Not a sandbox.** A worktree is a filesystem convention, not a security boundary — trial agents run with your OS permissions, so only bench task suites you trust. A first-run or changed suite requires explicit trust confirmation (every command shown verbatim, direnv-style); `--yes` skips the cost estimate but never the trust prompt — only an interactive yes or `--trust-suite` does. Per harness: **claude-code** is fully gated (the result above); **codex** has a runner verified with a real trial but no orchestrated A/B yet; **pi** is deferred to v2.1.
 
 ## Status
 
