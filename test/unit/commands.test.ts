@@ -268,7 +268,7 @@ describe("runListCommand — --limit / empty-results messaging", () => {
     const dataLines = stdout
       .trim()
       .split("\n")
-      .filter((l) => !l.startsWith("harness") && !l.startsWith("…"));
+      .filter((l) => /^(claude-code|codex|pi)\b/.test(l));
     expect(dataLines).toHaveLength(5);
     expect(stdout).toMatch(
       /…and 7 more sessions \(use --limit <n> or --limit 0 for all\)/,
@@ -281,7 +281,7 @@ describe("runListCommand — --limit / empty-results messaging", () => {
     const dataLines = stdout
       .trim()
       .split("\n")
-      .filter((l) => !l.startsWith("harness") && !l.startsWith("…"));
+      .filter((l) => /^(claude-code|codex|pi)\b/.test(l));
     expect(dataLines).toHaveLength(12); // all main sessions in the fixture tree
   });
 
