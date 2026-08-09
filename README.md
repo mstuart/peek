@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node >=20">
   <a href="https://deepwiki.com/mstuart/peek"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   <a href="https://www.npmjs.com/package/@mstuart/peek"><img src="https://img.shields.io/npm/v/@mstuart/peek?label=npm" alt="npm"></a>
-  <a href="https://socket.dev/npm/package/@mstuart/peek"><img src="https://socket.dev/api/badge/npm/package/@mstuart/peek" alt="Socket"></a>
+  <!-- Socket badge activates once socket.dev indexes @mstuart/peek: <a href="https://socket.dev/npm/package/@mstuart/peek"><img src="https://socket.dev/api/badge/npm/package/@mstuart/peek" alt="Socket"></a> -->
 </p>
 
 <p align="center">
