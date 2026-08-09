@@ -291,7 +291,7 @@ describe("buildCostReport", () => {
 
 // ---------------------------------------------------------------------------
 // mergeAttribution / buildCostAllReport — `peek cost --all` cross-session
-// attribution merge (docs/DESIGN.md Lane C).
+// attribution merge (docs/DESIGN.md § Other v2 subsystems, Lane C).
 // ---------------------------------------------------------------------------
 
 describe("mergeAttribution", () => {

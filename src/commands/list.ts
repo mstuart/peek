@@ -1,4 +1,4 @@
-// `peek list` (T3.1) — docs/DESIGN.md § "CLI surface (v1)": "documented first
+// `peek list` (T3.1) — docs/DESIGN.md § "CLI surface": "documented first
 // command: cross-harness inventory (cost/tokens/compactions)". First command
 // a new user runs (`npx peek-agent list`, per PLAN's pitch order).
 //
@@ -72,7 +72,7 @@ export interface CachedListEntry {
 /** buildListReport's filter (ref.kind) and sort (ref.mtime) only ever touch
  * `ref`, never session content, so it accepts either a freshly parsed entry
  * or a cache hit — loadEntries mixes both per-file (cache hit -> row, skip
- * parse; miss -> parse -> upsert, docs/DESIGN.md Lane B). */
+ * parse; miss -> parse -> upsert, docs/DESIGN.md § Other v2 subsystems (Lane B)). */
 export type ListReportEntry = ListEntry | CachedListEntry;
 
 const HOME = homedir();
@@ -248,7 +248,7 @@ export async function loadEntries(
     ? allRefs
     : allRefs.filter((r) => r.kind === "main");
 
-  // Totals cache (docs/DESIGN.md Lane B / docs/PERF.md fix #3): a hit
+  // Totals cache (docs/DESIGN.md § Other v2 subsystems, Lane B / docs/PERF.md fix #3): a hit
   // (path+mtimeMs+size all match) skips the parse entirely; a miss still
   // takes the spans:false lite-parse path below and gets upserted so the
   // NEXT `list` run hits.

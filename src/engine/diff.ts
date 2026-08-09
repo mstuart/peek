@@ -1,4 +1,4 @@
-// Session diff engine (T5.1a) — docs/DESIGN.md § "CLI surface (v1)" `peek diff`
+// Session diff engine (T5.1a) — docs/DESIGN.md § "CLI surface" `peek diff`
 // entries + § "Unified Session Model" (Composition/CostBreakdown/CompactionEvent).
 //
 // Pure module: no CLI, no file I/O. The CLI wrapper (a separate later task,

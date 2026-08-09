@@ -1,4 +1,4 @@
-// `peek diff` (T5.1b) — docs/DESIGN.md § "CLI surface (v1)": "README headline:
+// `peek diff` (T5.1b) — docs/DESIGN.md § "CLI surface": "README headline:
 // totals/composition/cost/compactions/config deltas" + `--last N`'s
 // zero-argument selection algorithm (audits R3-P1, R3-F3; generalized from
 // v1's fixed `--last 2` to `--last <n>` (2..5) in v2, Lane F5).

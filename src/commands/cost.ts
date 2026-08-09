@@ -1,4 +1,4 @@
-// `peek cost` (T3.1) — docs/DESIGN.md § "CLI surface (v1)": "historical
+// `peek cost` (T3.1) — docs/DESIGN.md § "CLI surface": "historical
 // attribution: model/tool/MCP server/subagent; cache waste; miss-reason
 // spikes".
 //
@@ -10,14 +10,14 @@
 // `--all` aggregation and family dedup: engine/dedup.ts's dedupFamily()
 // dedups a parent + its subagent children ACROSS file boundaries (zeroing
 // usage/cost/contextTotal on later-seen (message.id, requestId) replays —
-// DESIGN.md's documented "per-file dedup" gap, § Accounting rules T2.5
-// reconciliation result: ~1.6-5.9% inflation on a heavily-forked
+// docs/DESIGN.md § Measured results ledger's documented "per-file dedup" gap
+// (T2.5 reconciliation result: ~1.6-5.9% inflation on a heavily-forked
 // orchestrator family without it). Its documented precondition is a set of
 // already-priced sessions (it zeroes CostBreakdown too, not just tokens), so
 // `--all` prices each parent+children family BEFORE calling dedupFamily,
 // then rolls the result up via attribution.ts's bySubagent().
 //
-// `--all` byModel/byTool/byMcpServer (DESIGN.md Lane C): attribution.ts's
+// `--all` byModel/byTool/byMcpServer (docs/DESIGN.md § Other v2 subsystems, Lane C): attribution.ts's
 // mergeAttribution() merges these across every family AND across families
 // (the cross-harness case) in one pass. It does its OWN replay exclusion
 // rather than consuming dedupFamily's output — see its doc comment — so
@@ -221,7 +221,7 @@ export interface CostAllReport {
 export const FAMILY_DEDUP_NOTE =
   "aggregated per-session-family: each main session is combined with its subagent children " +
   "and deduped ACROSS those files (engine/dedup.ts's dedupFamily — catches a session replayed " +
-  "verbatim between a parent and a subagent, DESIGN.md's measured ~1.6-5.9% overcount case) " +
+  "verbatim between a parent and a subagent, docs/DESIGN.md § Measured results ledger's measured ~1.6-5.9% overcount case) " +
   "before rolling up via bySubagent. byModel/byTool/byMcpServer below are merged the same way " +
   "(engine/attribution.ts's mergeAttribution) — a cross-file replay turn is excluded from " +
   "those tables entirely, not just zeroed, so its tool-call/tool-result spans don't inflate " +

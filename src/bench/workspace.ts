@@ -1,4 +1,4 @@
-// Trial workspace lifecycle (docs/DESIGN.md § Lane A "Trial isolation").
+// Trial workspace lifecycle (docs/DESIGN.md § Bench design "Trial isolation").
 // Each trial runs in a fresh `git worktree` of the target repo (detached
 // HEAD at the current commit) when the target is a git repo, or a
 // recursive copy otherwise. Destroy is best-effort and crash-safety is the

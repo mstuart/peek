@@ -1,4 +1,4 @@
-// `peek compactions` (T3.1) — docs/DESIGN.md § "CLI surface (v1)": "timeline:
+// `peek compactions` (T3.1) — docs/DESIGN.md § "CLI surface": "timeline:
 // shrinkExact (headline), discardedEst (labeled), per-compaction cost".
 //
 // Pipeline (commands/shared.ts's file header): parse -> dedupSession ->

@@ -1,4 +1,4 @@
-// claude-code bench runner (Lane A, task A2). docs/DESIGN.md § "Lane A" > "Trial isolation".
+// claude-code bench runner (Lane A, task A2). docs/DESIGN.md § Bench design > "Trial isolation".
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";

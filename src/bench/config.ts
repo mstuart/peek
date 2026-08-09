@@ -1,4 +1,4 @@
-// Config-variant overlay (docs/DESIGN.md § Lane A "Config variants"). A
+// Config-variant overlay (docs/DESIGN.md § Bench design "Config variants"). A
 // variant dir may contain CLAUDE.md, AGENTS.md, .claude/settings.json (a
 // COMPLETE file, not a fragment — Claude Code never merges within one file
 // and silently ignores invalid settings files in headless mode, so a

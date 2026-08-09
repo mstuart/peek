@@ -1,4 +1,4 @@
-// Canonical process-spawn contract (docs/DESIGN.md § Lane A "Task suite" /
+// Canonical process-spawn contract (docs/DESIGN.md § Bench design "Task suite" /
 // "Trial isolation") shared by every bench runner (owned here — claude,
 // codex, and workspace setup-command execution all go through this single
 // function). Spawns detached (fresh process group) so a timeout can

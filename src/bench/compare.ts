@@ -1,5 +1,5 @@
-// Pure aggregation over TrialResult[] (A4 deliverable #2, DESIGN.md § "Lane
-// A — `peek bench`" "Output": "prints an A/B table (per task: success a/b,
+// Pure aggregation over TrialResult[] (A4 deliverable #2, DESIGN.md § Bench
+// design "Metrics & output": "prints an A/B table (per task: success a/b,
 // median tokens, median cost, compaction counts, deltas)").
 //
 // No I/O — takes TrialResult[] (already loaded via results.ts), returns a
