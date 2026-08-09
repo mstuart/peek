@@ -8,7 +8,8 @@
   <a href="https://github.com/mstuart/peek/actions/workflows/ci.yml"><img src="https://github.com/mstuart/peek/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node >=20">
-  <!-- BADGES: deepwiki + socket to be inserted (verified URLs pending research-badges) -->
+  <a href="https://deepwiki.com/mstuart/peek"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <!-- Socket badge added at npm-publish time: [![Socket](https://socket.dev/api/badge/npm/package/peek-agent)](https://socket.dev/npm/package/peek-agent) — no pre-publish badge exists -->
 </p>
 
 <p align="center">
