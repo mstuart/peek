@@ -7,7 +7,12 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": ["dist", "node_modules", "docs/examples"]
+    "ignore": [
+      "dist",
+      "node_modules",
+      "docs/examples",
+      ".peek"
+    ]
   },
   "formatter": {
     "enabled": true,
