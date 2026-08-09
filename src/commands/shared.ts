@@ -236,7 +236,7 @@ function ancestorDirs(dir: string, levels: number): string[] {
  * claude-code's "root/slugDir/id.jsonl" shape check for EVERY harness's
  * fixture tree, not just claude-code's — a codex fixture path was being
  * mis-resolved to a bogus claude-code SessionRef purely because its
- * containing directory looked like a slug dir (docs/examples/BROKEN.md).
+ * containing directory looked like a slug dir .
  * Directory shape is not a reliable signal here; file content is.
  *
  *   - codex: every on-disk record is EXACTLY `{timestamp, type, payload}` —
