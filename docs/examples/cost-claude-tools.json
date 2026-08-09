@@ -1,0 +1,88 @@
+{
+  "harness": "claude-code",
+  "sessionId": "tool-use-names",
+  "cwd": "/Users/fixture/project",
+  "model": "claude-sonnet-5",
+  "totals": {
+    "tokens": {
+      "inputUncached": 2000,
+      "cacheRead": 1000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "output": 250,
+      "contextTotal": 3000
+    },
+    "cost": 0.0067,
+    "costLabel": "$0.0067",
+    "priced": true
+  },
+  "byModel": [
+    {
+      "model": "claude-sonnet-5",
+      "turnCount": 2,
+      "tokens": {
+        "inputUncached": 2000,
+        "cacheRead": 1000,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "output": 250,
+        "contextTotal": 3000
+      },
+      "costLabel": "$0.0067",
+      "priced": true
+    }
+  ],
+  "byTool": [
+    {
+      "toolName": "get_issue",
+      "mcpServer": "github",
+      "callCount": 1,
+      "resultCount": 1,
+      "tokenShareEst": 39,
+      "tokenShareLabel": "~39"
+    },
+    {
+      "toolName": "run_lint",
+      "mcpServer": "plugin_acme-tools_linter",
+      "callCount": 1,
+      "resultCount": 1,
+      "tokenShareEst": 19,
+      "tokenShareLabel": "~19"
+    }
+  ],
+  "byMcpServer": [
+    {
+      "mcpServer": "github",
+      "tools": [
+        "get_issue"
+      ],
+      "callCount": 1,
+      "resultCount": 1,
+      "tokenShareEst": 39,
+      "tokenShareLabel": "~39"
+    },
+    {
+      "mcpServer": "plugin_acme-tools_linter",
+      "tools": [
+        "run_lint"
+      ],
+      "callCount": 1,
+      "resultCount": 1,
+      "tokenShareEst": 19,
+      "tokenShareLabel": "~19"
+    }
+  ],
+  "cache": {
+    "hitRatePct": 33.33333333333333,
+    "hitRateLabel": "33%",
+    "totals": {
+      "cacheRead": 1000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "inputUncached": 2000
+    },
+    "wasteTokens": 0,
+    "wasteTokensLabel": "0",
+    "missReasons": []
+  }
+}

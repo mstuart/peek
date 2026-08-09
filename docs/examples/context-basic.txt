@@ -1,0 +1,17 @@
+peek context — claude-code · normal-turns · /Users/fixture/project
+
+Turn 1  assistant  claude-sonnet-5  contextTotal 1,500
+  category       tokens  share                                                                            
+  userText           ~9  ░░░░░░░░ 1%                                                                      
+  assistantText      ~8  ░░░░░░░░ 1%                                                                      
+  toolCallArgs      ~13  ░░░░░░░░ 1%                                                                      
+  residual        1,470  ████████ 98%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 2  assistant  claude-sonnet-5  contextTotal 1,850
+  category       tokens  share                                                                            
+  userText           ~9  ░░░░░░░░ 0%                                                                      
+  assistantText     ~22  ░░░░░░░░ 1%                                                                      
+  toolResults       ~45  ░░░░░░░░ 2%                                                                      
+  toolCallArgs      ~13  ░░░░░░░░ 1%                                                                      
+  residual        1,761  ████████ 95%  system prompt + tool schemas + framing (not logged by this harness)
+

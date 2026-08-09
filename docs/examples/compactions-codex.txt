@@ -1,0 +1,4 @@
+peek compactions — codex · compaction · /Users/dev/projects/compaction-demo
+
+turn  when               before   after   shrink  ~discarded  ~summary  cost
+   3  2026-07-20 14:22  214,300  26,800  187,500    ~187,562       ~62     —

@@ -1,0 +1,17 @@
+{
+  "harness": "claude-code",
+  "sessionId": "compaction",
+  "cwd": "/Users/fixture/project",
+  "rows": [
+    {
+      "turnNumber": 3,
+      "whenLabel": "2026-08-01 15:00",
+      "beforeLabel": "20,000",
+      "afterLabel": "3,000",
+      "shrinkLabel": "17,000",
+      "discardedLabel": "~17,040",
+      "summarySizeLabel": "~40",
+      "costLabel": "—"
+    }
+  ]
+}

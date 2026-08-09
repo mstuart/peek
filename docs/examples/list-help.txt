@@ -1,0 +1,13 @@
+Usage: peek list [options]
+
+Cross-harness inventory of discovered sessions: cost, tokens, compactions.
+
+Options:
+  --harness <harness>  restrict to one harness: claude-code | codex | pi
+  --cwd <path>         restrict to sessions discovered from this working
+                       directory
+  --since <date>       restrict to sessions modified on/after this date
+                       (YYYY-MM-DD or ISO)
+  --subagents          include subagent sessions (excluded by default)
+  --json               emit the full computed structure as JSON
+  -h, --help           display help for command

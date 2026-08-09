@@ -1,0 +1,82 @@
+{
+  "harness": "claude-code",
+  "harnessVersion": "2.1.104",
+  "sessionId": "normal-turns",
+  "cwd": "/Users/fixture/project",
+  "model": "claude-sonnet-5",
+  "turns": [
+    {
+      "turnNumber": 1,
+      "turnIndex": 0,
+      "role": "assistant",
+      "model": "claude-sonnet-5",
+      "contextTotal": 1500,
+      "categories": [
+        {
+          "category": "userText",
+          "tokens": 9,
+          "tokensLabel": "~9",
+          "pct": 0.006
+        },
+        {
+          "category": "assistantText",
+          "tokens": 8,
+          "tokensLabel": "~8",
+          "pct": 0.005333333333333333
+        },
+        {
+          "category": "toolCallArgs",
+          "tokens": 13,
+          "tokensLabel": "~13",
+          "pct": 0.008666666666666666
+        }
+      ],
+      "residual": {
+        "tokens": 1470,
+        "tokensLabel": "1,470",
+        "pct": 0.98,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    },
+    {
+      "turnNumber": 2,
+      "turnIndex": 1,
+      "role": "assistant",
+      "model": "claude-sonnet-5",
+      "contextTotal": 1850,
+      "categories": [
+        {
+          "category": "userText",
+          "tokens": 9,
+          "tokensLabel": "~9",
+          "pct": 0.004864864864864865
+        },
+        {
+          "category": "assistantText",
+          "tokens": 22,
+          "tokensLabel": "~22",
+          "pct": 0.011891891891891892
+        },
+        {
+          "category": "toolResults",
+          "tokens": 45,
+          "tokensLabel": "~45",
+          "pct": 0.024324324324324326
+        },
+        {
+          "category": "toolCallArgs",
+          "tokens": 13,
+          "tokensLabel": "~13",
+          "pct": 0.007027027027027027
+        }
+      ],
+      "residual": {
+        "tokens": 1761,
+        "tokensLabel": "1,761",
+        "pct": 0.9518918918918919,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    }
+  ],
+  "separators": []
+}

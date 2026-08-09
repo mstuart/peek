@@ -1,0 +1,22 @@
+peek context — codex · real-capture-redacted · /3M5DD0J/7K3/6ypIwoGwkp/kHIREQIOZy8jbIe/BRU2ocfyR6peHOCSEL4EXRAUnt3rv0I1E7YY/5DuD7LDKZU/FRd8m1Q7N8L07
+
+Turn 1  system     unknown  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 2  user       unknown  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 3  user       gpt-5.5  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 4  assistant  gpt-5.5  contextTotal 37,476
+  category              tokens  share                                                                            
+  userText                  ~6  ░░░░░░░░ 0%                                                                      
+  assistantText             ~1  ░░░░░░░░ 0%                                                                      
+  instructionInjection  ~6,870  █░░░░░░░ 18%                                                                     
+  systemPrompt          ~5,334  █░░░░░░░ 14%                                                                     
+  residual              25,265  █████░░░ 67%  system prompt + tool schemas + framing (not logged by this harness)
+

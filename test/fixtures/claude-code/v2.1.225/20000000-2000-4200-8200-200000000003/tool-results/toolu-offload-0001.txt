@@ -1,0 +1,15 @@
+[2026-08-05T10:55:01Z] Starting CI pipeline for commit a1b2c3d
+[2026-08-05T10:55:02Z] Installing dependencies...
+[2026-08-05T10:55:20Z] Dependencies installed OK
+[2026-08-05T10:55:21Z] Running unit tests...
+[2026-08-05T10:55:45Z] test_auth.py::test_login PASSED
+[2026-08-05T10:55:46Z] test_auth.py::test_logout PASSED
+[2026-08-05T10:55:47Z] test_flaky.py::test_race FAILED
+[2026-08-05T10:55:48Z] test_flaky.py::test_race FAILED (retry 1)
+[2026-08-05T10:55:49Z] test_flaky.py::test_race PASSED (retry 2)
+[2026-08-05T10:55:50Z] Running integration tests...
+[2026-08-05T10:56:10Z] test_payments.py::test_checkout PASSED
+[2026-08-05T10:56:12Z] test_payments.py::test_refund FAILED: assertion mismatch on refund amount
+[2026-08-05T10:56:13Z] Build FAILED: 1 test failure (test_refund)
+[2026-08-05T10:56:14Z] Uploading artifacts...
+[2026-08-05T10:56:20Z] Pipeline finished with exit code 1

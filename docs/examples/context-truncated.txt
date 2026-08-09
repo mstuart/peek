@@ -1,0 +1,35 @@
+peek context — claude-code · 20000000-2000-4200-8200-200000000003 · /Users/fixture/project
+
+Turn 1  assistant  claude-sonnet-5  contextTotal 400
+  category      tokens  share                                                                            
+  userText         ~11  ░░░░░░░░ 3%                                                                      
+  toolCallArgs      ~7  ░░░░░░░░ 2%                                                                      
+  residual         382  ████████ 96%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 2  assistant  claude-sonnet-5  contextTotal 1,000
+  (lower bound — truncated sources)
+  category       tokens  share                                                                            
+  userText          ~11  ░░░░░░░░ 1%                                                                      
+  assistantText     ~22  ░░░░░░░░ 2%                                                                      
+  toolResults       ~21  ░░░░░░░░ 2%                                                                      
+  toolCallArgs       ~7  ░░░░░░░░ 1%                                                                      
+  residual          939  ████████ 94%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 3  assistant  claude-sonnet-5  contextTotal 1,100
+  (lower bound — truncated sources)
+  category       tokens  share                                                                            
+  userText          ~20  ░░░░░░░░ 2%                                                                      
+  assistantText     ~22  ░░░░░░░░ 2%                                                                      
+  toolResults       ~21  ░░░░░░░░ 2%                                                                      
+  toolCallArgs      ~19  ░░░░░░░░ 2%                                                                      
+  residual        1,018  ███████░ 93%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 4  assistant  claude-sonnet-5  contextTotal 1,850
+  (lower bound — truncated sources)
+  category       tokens  share                                                                            
+  userText          ~20  ░░░░░░░░ 1%                                                                      
+  assistantText     ~34  ░░░░░░░░ 2%                                                                      
+  toolResults       ~39  ░░░░░░░░ 2%                                                                      
+  toolCallArgs      ~19  ░░░░░░░░ 1%                                                                      
+  residual        1,738  ████████ 94%  system prompt + tool schemas + framing (not logged by this harness)
+
