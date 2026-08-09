@@ -110,7 +110,7 @@ Both configs passed `verify`; switching to haiku cut cost 93.4% for +1.1s wall �
 
 ## Status
 
-v1 shipped through a five-round, three-lens adversarial audit (27 → 0 findings) before implementation; v2 added `peek bench`, the totals cache, `cost --all`, pi System B, and the report dashboard. Verified, not just designed: 100% real-corpus parse, clean-room packaging, a privacy audit, and a full performance profile — details and the measured-results ledger in [docs/DESIGN.md](docs/DESIGN.md), [docs/PERF.md](docs/PERF.md), [docs/PRIVACY-AUDIT.md](docs/PRIVACY-AUDIT.md), and [docs/BUILDLOG.md](docs/BUILDLOG.md).
+v1 shipped through a multi-round adversarial design review before implementation; v2 added `peek bench`, the totals cache, `cost --all`, pi System B, and the report dashboard. Verified, not just designed: 100% real-corpus parse, a privacy audit, and a full performance profile — the design reference and measured-results ledger are in [docs/DESIGN.md](docs/DESIGN.md), with details in [docs/PERF.md](docs/PERF.md) and [docs/PRIVACY-AUDIT.md](docs/PRIVACY-AUDIT.md).
 
 **Known limitations:** pi is source-verified only (no real pi data validated yet); Codex composition is measured at a 67.4% residual, not near-exact — see the [Codex and pi caveats in docs/DESIGN.md](docs/DESIGN.md).
 

@@ -127,7 +127,7 @@ answer once the corpus keeps growing past what even a lite parse can do in under
 This report contains only timings, file counts, byte sizes, and turn/cost totals — no
 prompt text, tool output, or other session content.
 
-## Post-fix measurement + v1 decision (orchestrator, 2026-08-08)
+## Post-fix measurement + v1 decision (2026-08-08)
 
 Fixes #1 (spans:false in the list pipeline) and #2 (batched concurrency) landed and
 verified: full suite green, peak RSS capped by batching, `peek list` wall-clock
@@ -139,7 +139,7 @@ without fix #3 (persistent per-session totals cache keyed by path+mtime+size).
 anywhere). Fix #3 is the top post-v1 performance item.** Mitigations available today:
 `--cwd`/`--since`/`--harness` filters cut the parse set proportionally.
 
-## v2 Lane B result (2026-08-09): totals cache shipped
+## Totals cache shipped (2026-08-09)
 
 Fix #3 (persistent per-session totals cache, path+mtime+size keyed, schema-versioned
 JSONL under XDG_CACHE_HOME) landed. Measured on the real corpus (7,526 main sessions):

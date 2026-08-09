@@ -8,11 +8,11 @@ logs never leave the machine; the repo ships synthetic fixtures plus two
 redacted real captures only.
 
 Audited against the live working tree as of 2026-08-08 16:42 local. Note:
-`scripts/redact.ts` was actively being patched by another agent during this
-audit (grew from 397 to 466 lines mid-sweep, fixing mid-string structural-tag
-scrambling and adding context-aware `name`/`toolName` handling). Findings
-below reflect the file's state at the end of the audit; two gaps documented
-in `test/fixtures/codex/README.md` ("Known redaction gap" note on
+`scripts/redact.ts` was updated during this audit window (grew from 397 to
+466 lines mid-sweep, fixing mid-string structural-tag scrambling and adding
+context-aware `name`/`toolName` handling). Findings below reflect the file's
+state at the end of the audit; two gaps documented in
+`test/fixtures/codex/README.md` ("Known redaction gap" note on
 `real-capture-tools-redacted.jsonl`) were fixed during the audit and that
 README note is now stale/inaccurate — a doc-drift item, not a leak.
 
@@ -27,8 +27,7 @@ addresses, and API-key shapes (`sk-`, `ghp_`, `xox[baprs]-`, `AKIA`, `Bearer
 **Legitimate hits (not leaks):**
 - `LICENSE:3` — `Copyright (c) 2026 Mark Stuart`. Expected for an OSS license file.
 - `package.json:29` — `git+https://github.com/mstuart/peek.git`. Standard `repository` field.
-- `test/unit/redact.test.ts` — multiple `/Users/mark/git/peek` occurrences. These are **test *inputs*** feeding the redactor under test; every assertion in that file checks the string does *not* survive redaction (`.not.toBe(...)`, `.not.toContain(...)`). This is the test proving the leak-prevention works, not a leak itself.
-- `docs/CLEANROOM.md:12` — "Working copy: rsync of `/Users/mark/git/peek` → scratchpad...". Deliberate packaging-validation documentation describing the audit environment, not session content. Low-severity judgment call: it does put the real macOS username in a doc that will ship publicly. Not a session-content leak, but flagging since it's avoidable (could say "the repo root" instead of the absolute path) if the user wants zero personal-path mentions anywhere in the shipped tree.
+- `test/unit/redact.test.ts` — multiple absolute local-repo-path occurrences (e.g. `~/git/peek`). These are **test *inputs*** feeding the redactor under test; every assertion in that file checks the string does *not* survive redaction (`.not.toBe(...)`, `.not.toContain(...)`). This is the test proving the leak-prevention works, not a leak itself.
 
 **No hits at all:** email addresses, API-key-shaped strings. (One grep match on the `Bearer` pattern in `src/adapters/claude/spans.ts:22` was a false positive — the line only contains the literal strings `"<teammate-message"` / `"<task-notification"`, no bearer token.)
 

@@ -694,7 +694,7 @@ describe("buildCompactionsReport", () => {
 
 // ---------------------------------------------------------------------------
 // resolveSessionRef — direct-file-path resolution (content-sniffed, not
-// directory-shape-based). docs/examples/BROKEN.md regression: a codex
+// directory-shape-based). codex-by-path resolution regression: a codex
 // fixture passed by path to cost/compactions used to get silently
 // mis-resolved as claude-code (directory-shape match), producing the wrong
 // harness label and all-zero totals instead of an error.
@@ -719,19 +719,19 @@ describe("resolveSessionRef — direct-file-path resolution", () => {
     "system-b-v4/2026-08-01T16-00-00-000Z_b9f0fc61-c03e-49c7-a148-e1e7c660822c.jsonl",
   );
 
-  it("BROKEN.md regression: a codex fixture by path resolves as codex, not claude-code", async () => {
+  it("codex-by-path resolution regression: a codex fixture by path resolves as codex, not claude-code", async () => {
     const ref = await resolveSessionRef(CODEX_TOOLS_PATH, {});
     expect(ref.harness).toBe("codex");
   });
 
-  it("BROKEN.md regression: `cost` on the codex fixture by path reports codex with real (non-zero) totals", async () => {
+  it("codex-by-path resolution regression: `cost` on the codex fixture by path reports codex with real (non-zero) totals", async () => {
     const priced = await loadPricedSession(CODEX_TOOLS_PATH, {});
     const report = buildCostReport(priced);
     expect(report.harness).toBe("codex");
     expect(report.totals.tokens.contextTotal).toBeGreaterThan(0);
   });
 
-  it("BROKEN.md regression: `compactions` on the codex fixture by path reports codex with its real compaction row, not an empty timeline", async () => {
+  it("codex-by-path resolution regression: `compactions` on the codex fixture by path reports codex with its real compaction row, not an empty timeline", async () => {
     const finalized = await loadFinalizedSession(CODEX_COMPACTION_PATH, {});
     const report = buildCompactionsReport(finalized);
     expect(report.harness).toBe("codex");

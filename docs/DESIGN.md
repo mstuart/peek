@@ -198,7 +198,7 @@ Config A/B regression runner: re-runs a task suite against two config variants a
 
 ### Trial isolation
 
-Each trial runs in a fresh `git worktree` of the target repo (or a tmp copy when not a git repo; `--skip-git-repo-check` is load-bearing only for that fallback) under the scratch area; trials are **serialized** (one at a time — removes all transcript races); agent child processes are spawned `detached: true` (fresh process group) and killed on timeout via `process.kill(-pid, "SIGTERM")` then SIGKILL after 10s — never bare `kill(pid)` (claude spawns MCP-server children in the inherited group; bare kill leaks them, group-kill of an inherited group can kill the orchestrator).
+Each trial runs in a fresh `git worktree` of the target repo (or a tmp copy when not a git repo; `--skip-git-repo-check` is load-bearing only for that fallback) under the scratch area; trials are **serialized** (one at a time — removes all transcript races); agent child processes are spawned `detached: true` (fresh process group) and killed on timeout via `process.kill(-pid, "SIGTERM")` then SIGKILL after 10s — never bare `kill(pid)` (claude spawns MCP-server children in the inherited group; bare kill leaks them, and group-killing an inherited group risks killing the caller too).
 
 - **claude-code**: `claude -p "<prompt>" --output-format json --permission-mode acceptEdits --max-budget-usd <per-trial-cap>` (+ `--model` when the variant specifies). Transcript path is **constructed, never discovered**: stdout JSON carries `session_id` → `~/.claude/projects/<slugify(cwd)>/<session_id>.jsonl` (the slug is not collision-free — `/foo-bar/baz` and `/foo/bar-baz` collide — so directory discovery is forbidden; the session-id path is exact). `permission_denials` from the result JSON are recorded per trial.
 - **codex**: `codex exec --skip-git-repo-check -s workspace-write <non-interactive-approval-flag> "<prompt>"` (model via `-m`). Rollout matched by parsing candidate files' line-1 `session_meta.payload.cwd` == the trial worktree path (exact, race-free even if serialization is ever relaxed) — never newest-file recency.
@@ -256,7 +256,7 @@ Per `docs/recon/pi.md`, System B is a JSONL mutation log: `{kind: header|entry|r
 
 Every entry below is a real, reproducible measurement, dated.
 
-- **T2.5 ccusage reconciliation (2026-08-08):** peek matches ccusage EXACTLY (0.00% every component incl. cost) at matching scope — per-file for simple sessions, family (main+subagents) for ccusage's session grouping (34-file session exact). Named residual on a 210-file orchestrator family: peek +1.6–5.9% because peek deduped per-file while ccusage dedups corpus-wide — quantified as 319 cross-file replay turns / ~76M tokens → family-scope dedup shipped as an engine refinement (Accounting rule 2) to close this gap.
+- **T2.5 ccusage reconciliation (2026-08-08):** peek matches ccusage EXACTLY (0.00% every component incl. cost) at matching scope — per-file for simple sessions, family (main+subagents) for ccusage's session grouping (34-file session exact). Named residual on the 210-file multi-subagent family: peek +1.6–5.9% because peek deduped per-file while ccusage dedups corpus-wide — quantified as 319 cross-file replay turns / ~76M tokens → family-scope dedup shipped as an engine refinement (Accounting rule 2) to close this gap.
 - **Codex composition residual (2026-08-08):** measured at 67.4% (25,265 of 37,476 tokens) on the trivial real capture, post-seeding of `base_instructions` + `dynamic_tools`. Refutes the original "near-exact" hypothesis as stated — see the Codex footnote in Positioning.
 - **Codex usage semantics (2026-08-08):** `total 37,481 = input 37,476 + output 5`, `cached_input 1,408` confirmed a subset of input; `cache_write_input_tokens` absent even on codex-cli 0.134.0.
 - **`peek bench` self-hosted A/B gate (2026-08-09):** 1 task × 2 configs (`current` vs `model=haiku`), real claude-code agents, serialized worktree trials, run against this repo — both passed `verify`; config-b **−93.4% cost** ($0.5833 → $0.0383), **−19.1% tokens**, **+1.1s wall**. The gate also caught and fixed one real bug (`slugify` must map ALL non-alphanumerics, not just `/` — regression-tested) and surfaced that worktree trials require a repo with ≥1 commit.
@@ -287,16 +287,8 @@ Additional deferred items from the v2 lane plan:
 
 ## Process provenance
 
-This document is the living reference; it does not carry the audit trail. For
-the day-by-day reconstruction of how `peek` was designed and built — the
-five-round adversarial audit loop (finding counts 27 → 9 → 6 → 3 → 1 → 0),
-the implementation swarm's task/worker breakdown, and the specific bugs the
-audit process caught before they shipped — see `docs/BUILDLOG.md`.
-
-Source code comments across `src/` cite specific audit findings inline using
-IDs of the form `R<round>-<category><n>` (e.g. `R1-C2`, `R2-F1`, `R3-P1`),
-where the category letter is `C` (correctness), `F` (feasibility), or `P`
-(product). These IDs are a pointer into the audit history described in
-BUILDLOG.md, not into this document — a comment like "audit R2-C1: the
-headline number" documents *why* a rule exists, independent of which file
-currently hosts the rule's description.
+This document is the living reference; it describes the system as
+implemented. `peek` was developed with multi-round adversarial design and
+correctness review — successive rounds drove the open finding count from 27
+down to 0 before v1 shipped, with each round's findings addressed before the
+next began.
