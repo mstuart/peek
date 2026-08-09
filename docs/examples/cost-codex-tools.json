@@ -1,0 +1,72 @@
+{
+  "harness": "codex",
+  "sessionId": "real-capture-tools-redacted",
+  "cwd": "/3M5DD0J/7K3/6ypIwoGwkp/kHIREQIOZy8jbIe/BRU2ocfyR6peHOCSEL4EXRAUnt3rv0I1E7YY/5DuD7LDKZU/jUnCBrsj",
+  "model": "gpt-5.5",
+  "totals": {
+    "tokens": {
+      "inputUncached": 37708,
+      "cacheRead": 38656,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "output": 177,
+      "contextTotal": 76364
+    },
+    "cost": 0.21317800000000003,
+    "costLabel": "—",
+    "priced": false
+  },
+  "byModel": [
+    {
+      "model": "gpt-5.5",
+      "turnCount": 6,
+      "tokens": {
+        "inputUncached": 37708,
+        "cacheRead": 38656,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "output": 177,
+        "contextTotal": 76364
+      },
+      "costLabel": "$0.21",
+      "priced": true
+    },
+    {
+      "model": "unknown",
+      "turnCount": 2,
+      "tokens": {
+        "inputUncached": 0,
+        "cacheRead": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "output": 0,
+        "contextTotal": 0
+      },
+      "costLabel": "—",
+      "priced": false
+    }
+  ],
+  "byTool": [
+    {
+      "toolName": "exec_command",
+      "callCount": 2,
+      "resultCount": 2,
+      "tokenShareEst": 153,
+      "tokenShareLabel": "~153"
+    }
+  ],
+  "byMcpServer": [],
+  "cache": {
+    "hitRatePct": 50.62071132994605,
+    "hitRateLabel": "51%",
+    "totals": {
+      "cacheRead": 38656,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "inputUncached": 37708
+    },
+    "wasteTokens": 0,
+    "wasteTokensLabel": "0",
+    "missReasons": []
+  }
+}

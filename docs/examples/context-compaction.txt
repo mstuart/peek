@@ -1,0 +1,20 @@
+peek context — claude-code · compaction · /Users/fixture/project
+
+Turn 1  assistant  claude-sonnet-5  contextTotal 20,000
+  category       tokens  share                                                                             
+  userText          ~10  ░░░░░░░░ 0%                                                                       
+  assistantText     ~17  ░░░░░░░░ 0%                                                                       
+  residual       19,973  ████████ 100%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 2  assistant  claude-sonnet-5  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+── compaction: shrunk 17,000 tokens (exact) ──
+
+Turn 3  assistant  claude-sonnet-5  contextTotal 3,000
+  category             tokens  share                                                                            
+  assistantText           ~15  ░░░░░░░░ 1%                                                                      
+  compactionSummaries     ~40  ░░░░░░░░ 1%                                                                      
+  residual              2,945  ████████ 98%  system prompt + tool schemas + framing (not logged by this harness)
+

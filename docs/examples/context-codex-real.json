@@ -1,0 +1,91 @@
+{
+  "harness": "codex",
+  "harnessVersion": "0.134.0",
+  "sessionId": "real-capture-redacted",
+  "cwd": "/3M5DD0J/7K3/6ypIwoGwkp/kHIREQIOZy8jbIe/BRU2ocfyR6peHOCSEL4EXRAUnt3rv0I1E7YY/5DuD7LDKZU/FRd8m1Q7N8L07",
+  "model": "gpt-5.5",
+  "turns": [
+    {
+      "turnNumber": 1,
+      "turnIndex": 0,
+      "role": "system",
+      "model": "unknown",
+      "contextTotal": 0,
+      "categories": [],
+      "residual": {
+        "tokens": 0,
+        "tokensLabel": "0",
+        "pct": 0,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    },
+    {
+      "turnNumber": 2,
+      "turnIndex": 1,
+      "role": "user",
+      "model": "unknown",
+      "contextTotal": 0,
+      "categories": [],
+      "residual": {
+        "tokens": 0,
+        "tokensLabel": "0",
+        "pct": 0,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    },
+    {
+      "turnNumber": 3,
+      "turnIndex": 2,
+      "role": "user",
+      "model": "gpt-5.5",
+      "contextTotal": 0,
+      "categories": [],
+      "residual": {
+        "tokens": 0,
+        "tokensLabel": "0",
+        "pct": 0,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    },
+    {
+      "turnNumber": 4,
+      "turnIndex": 3,
+      "role": "assistant",
+      "model": "gpt-5.5",
+      "contextTotal": 37476,
+      "categories": [
+        {
+          "category": "userText",
+          "tokens": 6,
+          "tokensLabel": "~6",
+          "pct": 0.0001601024655779699
+        },
+        {
+          "category": "assistantText",
+          "tokens": 1,
+          "tokensLabel": "~1",
+          "pct": 0.000026683744262994982
+        },
+        {
+          "category": "instructionInjection",
+          "tokens": 6870,
+          "tokensLabel": "~6,870",
+          "pct": 0.18331732308677554
+        },
+        {
+          "category": "systemPrompt",
+          "tokens": 5334,
+          "tokensLabel": "~5,334",
+          "pct": 0.14233109189881524
+        }
+      ],
+      "residual": {
+        "tokens": 25265,
+        "tokensLabel": "25,265",
+        "pct": 0.6741647988045683,
+        "label": "system prompt + tool schemas + framing (not logged by this harness)"
+      }
+    }
+  ],
+  "separators": []
+}

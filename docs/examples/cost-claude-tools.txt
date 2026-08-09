@@ -1,0 +1,19 @@
+peek cost — claude-code · tool-use-names · /Users/fixture/project
+
+total: $0.0067  (3,000 tokens)
+
+by model
+model            turns  tokens     cost
+claude-sonnet-5      2   3,000  $0.0067
+
+by tool (token share is a char/4 estimate)
+tool       mcp server                calls  results  ~tokens
+get_issue  github                        1        1      ~39
+run_lint   plugin_acme-tools_linter      1        1      ~19
+
+by MCP server
+server                    tools      calls  ~tokens
+github                    get_issue      1      ~39
+plugin_acme-tools_linter  run_lint       1      ~19
+
+cache: 33% hit rate, 0 tokens re-billed on 0 documented misses

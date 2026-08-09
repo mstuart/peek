@@ -1,0 +1,397 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildContextReport — claude cache-heavy fixture > matches the snapshot 1`] = `
+{
+  "cwd": "/Users/fixture/project",
+  "harness": "claude-code",
+  "harnessVersion": "2.1.104",
+  "model": "claude-opus-5",
+  "separators": [],
+  "sessionId": "cache-heavy",
+  "turns": [
+    {
+      "categories": [
+        {
+          "category": "userText",
+          "pct": 0.005714285714285714,
+          "tokens": 10,
+          "tokensLabel": "~10",
+        },
+        {
+          "category": "assistantText",
+          "pct": 0.006285714285714286,
+          "tokens": 11,
+          "tokensLabel": "~11",
+        },
+      ],
+      "contextTotal": 1750,
+      "model": "claude-opus-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.988,
+        "tokens": 1729,
+        "tokensLabel": "1,729",
+      },
+      "role": "assistant",
+      "turnIndex": 0,
+      "turnNumber": 1,
+    },
+    {
+      "categories": [
+        {
+          "category": "userText",
+          "pct": 0.015833333333333335,
+          "tokens": 19,
+          "tokensLabel": "~19",
+        },
+        {
+          "category": "assistantText",
+          "pct": 0.02,
+          "tokens": 24,
+          "tokensLabel": "~24",
+        },
+      ],
+      "contextTotal": 1200,
+      "model": "claude-opus-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.9641666666666666,
+        "tokens": 1157,
+        "tokensLabel": "1,157",
+      },
+      "role": "assistant",
+      "turnIndex": 1,
+      "turnNumber": 2,
+    },
+  ],
+}
+`;
+
+exports[`buildContextReport — claude compaction fixture > matches the snapshot 1`] = `
+{
+  "cwd": "/Users/fixture/project",
+  "harness": "claude-code",
+  "harnessVersion": "2.1.104",
+  "model": "claude-sonnet-5",
+  "separators": [
+    {
+      "beforeTurnNumber": 3,
+      "label": "compaction: shrunk 17,000 tokens (exact)",
+      "shrinkExact": 17000,
+    },
+  ],
+  "sessionId": "compaction",
+  "turns": [
+    {
+      "categories": [
+        {
+          "category": "userText",
+          "pct": 0.0005,
+          "tokens": 10,
+          "tokensLabel": "~10",
+        },
+        {
+          "category": "assistantText",
+          "pct": 0.00085,
+          "tokens": 17,
+          "tokensLabel": "~17",
+        },
+      ],
+      "contextTotal": 20000,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.99865,
+        "tokens": 19973,
+        "tokensLabel": "19,973",
+      },
+      "role": "assistant",
+      "turnIndex": 0,
+      "turnNumber": 1,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "assistant",
+      "turnIndex": 1,
+      "turnNumber": 2,
+    },
+    {
+      "categories": [
+        {
+          "category": "assistantText",
+          "pct": 0.005,
+          "tokens": 15,
+          "tokensLabel": "~15",
+        },
+        {
+          "category": "compactionSummaries",
+          "pct": 0.013333333333333334,
+          "tokens": 40,
+          "tokensLabel": "~40",
+        },
+      ],
+      "contextTotal": 3000,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.9816666666666667,
+        "tokens": 2945,
+        "tokensLabel": "2,945",
+      },
+      "role": "assistant",
+      "turnIndex": 2,
+      "turnNumber": 3,
+    },
+  ],
+}
+`;
+
+exports[`buildContextReport — codex full-turn fixture > matches the snapshot 1`] = `
+{
+  "cwd": "/Users/dev/projects/full-turn-demo",
+  "harness": "codex",
+  "harnessVersion": "0.134.0",
+  "model": "gpt-5.5",
+  "separators": [],
+  "sessionId": "full-turn",
+  "turns": [
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 0,
+      "turnNumber": 1,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "assistant",
+      "turnIndex": 1,
+      "turnNumber": 2,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "assistant",
+      "turnIndex": 2,
+      "turnNumber": 3,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 3,
+      "turnNumber": 4,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "assistant",
+      "turnIndex": 4,
+      "turnNumber": 5,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 5,
+      "turnNumber": 6,
+    },
+    {
+      "categories": [
+        {
+          "category": "userText",
+          "pct": 0.0014657980456026058,
+          "tokens": 27,
+          "tokensLabel": "~27",
+        },
+        {
+          "category": "assistantText",
+          "pct": 0.00255157437567861,
+          "tokens": 47,
+          "tokensLabel": "~47",
+        },
+        {
+          "category": "thinking",
+          "pct": 0.0013029315960912053,
+          "tokens": 24,
+          "tokensLabel": "~24",
+        },
+        {
+          "category": "toolResults",
+          "pct": 0.0021172638436482085,
+          "tokens": 39,
+          "tokensLabel": "~39",
+        },
+        {
+          "category": "toolCallArgs",
+          "pct": 0.001031487513572204,
+          "tokens": 19,
+          "tokensLabel": "~19",
+        },
+        {
+          "category": "systemPrompt",
+          "pct": 0.0040173724212812165,
+          "tokens": 74,
+          "tokensLabel": "~74",
+        },
+        {
+          "category": "toolSchemas",
+          "pct": 0.011509229098805645,
+          "tokens": 212,
+          "tokensLabel": "~212",
+        },
+      ],
+      "contextTotal": 18420,
+      "model": "gpt-5.5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.9760043431053202,
+        "tokens": 17978,
+        "tokensLabel": "17,978",
+      },
+      "role": "assistant",
+      "turnIndex": 6,
+      "turnNumber": 7,
+    },
+  ],
+}
+`;
+
+exports[`buildContextReport — pi fixture > matches the snapshot 1`] = `
+{
+  "cwd": "/Users/fake/project",
+  "harness": "pi",
+  "harnessVersion": "3",
+  "model": "claude-sonnet-5",
+  "separators": [],
+  "sessionId": "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+  "turns": [
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 0,
+      "turnNumber": 1,
+    },
+    {
+      "categories": [
+        {
+          "category": "userText",
+          "pct": 0.004375,
+          "tokens": 7,
+          "tokensLabel": "~7",
+        },
+        {
+          "category": "assistantText",
+          "pct": 0.004375,
+          "tokens": 7,
+          "tokensLabel": "~7",
+        },
+        {
+          "category": "toolCallArgs",
+          "pct": 0.003125,
+          "tokens": 5,
+          "tokensLabel": "~5",
+        },
+      ],
+      "contextTotal": 1600,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0.988125,
+        "tokens": 1581,
+        "tokensLabel": "1,581",
+      },
+      "role": "assistant",
+      "turnIndex": 1,
+      "turnNumber": 2,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 2,
+      "turnNumber": 3,
+    },
+    {
+      "categories": [],
+      "contextTotal": 0,
+      "model": "claude-sonnet-5",
+      "residual": {
+        "label": "system prompt + tool schemas + framing (not logged by this harness)",
+        "pct": 0,
+        "tokens": 0,
+        "tokensLabel": "0",
+      },
+      "role": "user",
+      "turnIndex": 3,
+      "turnNumber": 4,
+    },
+  ],
+}
+`;

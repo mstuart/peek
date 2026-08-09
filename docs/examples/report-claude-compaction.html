@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>peek report — compaction</title>
+<style>
+    :root {
+      color-scheme: light;
+      --surface: #fcfcfb;
+      --surface-2: #f9f9f7;
+      --text-primary: #0b0b0b;
+      --text-secondary: #52514e;
+      --text-muted: #898781;
+      --gridline: #e1e0d9;
+      --border: rgba(11, 11, 11, 0.12);
+      --cat-userText: #2a78d6;
+      --cat-assistantText: #eb6834;
+      --cat-thinking: #1baf7a;
+      --cat-toolResults: #eda100;
+      --cat-toolCallArgs: #e87ba4;
+      --cat-instructionInjection: #008300;
+      --cat-systemPrompt: #4a3aa7;
+      --cat-toolSchemas: #e34948;
+      --cat-compactionSummaries: #2a78d6;
+      --cat-coordination: #eb6834;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --surface: #1a1a19;
+        --surface-2: #0d0d0d;
+        --text-primary: #ffffff;
+        --text-secondary: #c3c2b7;
+        --text-muted: #898781;
+        --gridline: #2c2c2a;
+        --border: rgba(255, 255, 255, 0.12);
+        --cat-userText: #3987e5;
+      --cat-assistantText: #d95926;
+      --cat-thinking: #199e70;
+      --cat-toolResults: #c98500;
+      --cat-toolCallArgs: #d55181;
+      --cat-instructionInjection: #008300;
+      --cat-systemPrompt: #9085e9;
+      --cat-toolSchemas: #e66767;
+      --cat-compactionSummaries: #3987e5;
+      --cat-coordination: #d95926;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--surface-2);
+      color: var(--text-primary);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 20px 64px;
+    }
+    h1, h2 { font-weight: 600; letter-spacing: -0.01em; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 0 0 12px; }
+    section { margin-top: 36px; }
+    dl.meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px 24px;
+      margin: 16px 0 0;
+      padding: 0;
+    }
+    dl.meta > div { display: flex; gap: 6px; min-width: 0; }
+    dl.meta dt { color: var(--text-secondary); flex: none; }
+    dl.meta dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .tile-label { font-size: 12px; color: var(--text-secondary); }
+    .tile-value {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 14px; font-size: 13px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+    .swatch-residual {
+      background-image: repeating-linear-gradient(
+        45deg,
+        var(--text-muted) 0,
+        var(--text-muted) 2px,
+        transparent 2px,
+        transparent 5px
+      );
+      background-color: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+    .turn-row { margin-bottom: 14px; }
+    .turn-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .turn-head .turn-total { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .bar {
+      display: flex;
+      height: 20px;
+      width: 100%;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--gridline);
+    }
+    .segment {
+      height: 100%;
+      box-sizing: border-box;
+      border-right: 2px solid var(--surface-2);
+      min-width: 1px;
+    }
+    .segment:last-child { border-right: none; }
+    .segment-residual {
+      background-image: repeating-linear-gradient(
+        45deg,
+        var(--text-muted) 0,
+        var(--text-muted) 3px,
+        transparent 3px,
+        transparent 7px
+      );
+      background-color: var(--surface-2);
+    }
+    details.breakdown { margin-top: 4px; font-size: 12px; color: var(--text-secondary); }
+    details.breakdown summary { cursor: pointer; }
+    details.breakdown ul { margin: 6px 0 0; padding-left: 18px; }
+    details.breakdown li { font-variant-numeric: tabular-nums; }
+    .compaction-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .compaction-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      flex: 1 1 260px;
+    }
+    .compaction-card .compaction-marker { font-weight: 600; margin-bottom: 4px; }
+    .compaction-card .compaction-detail { font-variant-numeric: tabular-nums; }
+    .compaction-card .compaction-time { color: var(--text-secondary); margin-top: 4px; font-size: 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    thead th { text-align: left; color: var(--text-secondary); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--gridline); }
+    tbody td { padding: 6px 10px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+    .table-wrap { overflow-x: auto; }
+    .empty-note { color: var(--text-secondary); font-size: 13px; }
+    footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid var(--gridline);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+<main>
+
+    <header>
+      <h1>peek report</h1>
+      <dl class="meta">
+        <div><dt>Harness</dt><dd>claude-code (2.1.104)</dd></div>
+        <div><dt>Session</dt><dd>compaction</dd></div>
+        <div><dt>Working directory</dt><dd>/Users/fixture/project</dd></div>
+        <div><dt>Model(s)</dt><dd>claude-sonnet-5</dd></div>
+        <div><dt>Started</dt><dd>2026-08-01T15:00:00.000Z</dd></div>
+        <div><dt>Duration</dt><dd>25s</dd></div>
+      </dl>
+    </header>
+  
+
+    <section class="stats">
+        <div class="tile">
+          <div class="tile-label">Total cost</div>
+          <div class="tile-value">$0.0441</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Input tokens</div>
+          <div class="tile-value">15,200</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Cache read</div>
+          <div class="tile-value">5,800</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Cache write</div>
+          <div class="tile-value">2,000</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Output tokens</div>
+          <div class="tile-value">750</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Turns</div>
+          <div class="tile-value">3</div>
+        </div>
+        <div class="tile">
+          <div class="tile-label">Compactions</div>
+          <div class="tile-value">1</div>
+        </div>
+    </section>
+  
+
+    <section>
+      <h2>Context composition over time</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <span class="swatch" style="background:var(--cat-userText)"></span>
+          userText
+        </div>
+        <div class="legend-item">
+          <span class="swatch" style="background:var(--cat-assistantText)"></span>
+          assistantText
+        </div>
+        <div class="legend-item">
+          <span class="swatch" style="background:var(--cat-compactionSummaries)"></span>
+          compactionSummaries
+        </div>
+    <div class="legend-item">
+      <span class="swatch swatch-residual"></span>
+      residual — system prompt + tool schemas + framing (not logged by this harness)
+    </div></div>
+      
+    <div class="turn-row">
+      <div class="turn-head">
+        <span>Turn 1 · assistant · claude-sonnet-5</span>
+        <span class="turn-total">20,000</span>
+      </div>
+      <div class="bar" role="img" aria-label="Turn 1 context composition"><div class="segment" style="width:0.050%;background:var(--cat-userText)" title="userText ~10 (0.1%)"></div><div class="segment" style="width:0.085%;background:var(--cat-assistantText)" title="assistantText ~17 (0.1%)"></div><div class="segment segment-residual" style="width:99.865%" title="residual 19,973 (99.9%) — system prompt + tool schemas + framing (not logged by this harness)"></div></div>
+      <details class="breakdown">
+        <summary>breakdown</summary>
+        <ul><li>userText: ~10 (0.1%)</li><li>assistantText: ~17 (0.1%)</li><li>residual: 19,973 (99.9%) — system prompt + tool schemas + framing (not logged by this harness)</li></ul>
+      </details>
+    </div>
+  
+    <div class="turn-row">
+      <div class="turn-head">
+        <span>Turn 3 · assistant · claude-sonnet-5</span>
+        <span class="turn-total">3,000</span>
+      </div>
+      <div class="bar" role="img" aria-label="Turn 3 context composition"><div class="segment" style="width:0.500%;background:var(--cat-assistantText)" title="assistantText ~15 (0.5%)"></div><div class="segment" style="width:1.333%;background:var(--cat-compactionSummaries)" title="compactionSummaries ~40 (1.3%)"></div><div class="segment segment-residual" style="width:98.167%" title="residual 2,945 (98.2%) — system prompt + tool schemas + framing (not logged by this harness)"></div></div>
+      <details class="breakdown">
+        <summary>breakdown</summary>
+        <ul><li>assistantText: ~15 (0.5%)</li><li>compactionSummaries: ~40 (1.3%)</li><li>residual: 2,945 (98.2%) — system prompt + tool schemas + framing (not logged by this harness)</li></ul>
+      </details>
+    </div>
+  
+    </section>
+  
+
+    <section>
+      <h2>Compaction timeline</h2>
+      <div class="compaction-strip">
+    <div class="compaction-card">
+      <div class="compaction-marker">Compaction #1 — before turn 3</div>
+      <div class="compaction-detail">before 20,000 &rarr; after 3,000 · shrink 17,000 (exact) · discarded ~17,040</div>
+      <div class="compaction-time">2026-08-01T15:00:21.000Z</div>
+    </div>
+  </div>
+    </section>
+  
+
+    <section>
+      <h2>Cost attribution — by model</h2>
+      
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Model</th><th>Turns</th><th>Context tokens (exact)</th><th>Cost</th></tr></thead>
+        <tbody>
+        <tr>
+          <td>claude-sonnet-5</td>
+          <td>3</td>
+          <td>23,000</td>
+          <td>$0.0441</td>
+        </tr></tbody>
+      </table>
+    </div>
+  
+    </section>
+    <section>
+      <h2>Cost attribution — by tool (token share, estimate)</h2>
+      <p class="empty-note">No tool calls recorded.</p>
+    </section>
+    <section>
+      <h2>Cost attribution — by MCP server (token share, estimate)</h2>
+      <p class="empty-note">No MCP server calls recorded.</p>
+    </section>
+  
+
+    <footer>
+      generated by peek-agent v0.1.0 · local-only, zero telemetry<br>
+      Generated 2026-08-08T23:46:31.292Z
+    </footer>
+  
+</main>
+
+</body>
+</html>

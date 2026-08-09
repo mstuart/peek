@@ -1,0 +1,38 @@
+peek diff
+
+field     a              b              
+id        cache-heavy    compaction     
+harness   claude-code    claude-code    
+version   2.1.104        2.1.104        
+model     claude-opus-5  claude-sonnet-5
+turns     2              3              
+duration  1m4s           25s            
+
+totals
+class                 a       b        Δ         %
+input (uncached)    350  15,200  +14,850  +4242.9%
+cache read          200   5,800   +5,600  +2800.0%
+cache write (5m)  1,400   2,000     +600    +42.9%
+cache write (1h)  1,000       0   -1,000   -100.0%
+output              200     750     +550   +275.0%
+
+cost
+  $0.03 → $0.04   Δ +$0.02 (+72.1%)
+
+composition (final turn)
+category                  a      b       Δ
+user text               ~19     ~0     -19
+assistant text          ~24    ~15      -9
+compaction summaries     ~0    ~40     +40
+residual              1,157  2,945  +1,788
+  system prompt + tool schemas + framing (not logged by this harness)
+
+compactions
+  a: 0 compaction(s), shrink 0, discarded ~0
+  b: 1 compaction(s), shrink 17,000, discarded ~17,040
+
+config
+  model: changed (claude-opus-5 → claude-sonnet-5)
+  harness version: unchanged (2.1.104)
+  system prompt: unknown
+  project instructions: unknown

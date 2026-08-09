@@ -1,0 +1,21 @@
+peek context — pi · cb5b132f-2542-40b3-a7c9-49ffc431e30b · /Users/fake/project
+
+Turn 1  user         contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 2  assistant  claude-sonnet-5  contextTotal 1,600
+  category       tokens  share                                                                            
+  userText           ~7  ░░░░░░░░ 0%                                                                      
+  assistantText      ~7  ░░░░░░░░ 0%                                                                      
+  toolCallArgs       ~5  ░░░░░░░░ 0%                                                                      
+  residual        1,581  ████████ 99%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 3  user       claude-sonnet-5  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+
+Turn 4  user       claude-sonnet-5  contextTotal 0
+  category  tokens  share                                                                           
+  residual       0  ░░░░░░░░ 0%  system prompt + tool schemas + framing (not logged by this harness)
+

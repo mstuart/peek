@@ -1,0 +1,4 @@
+Turn 2 — spans
+category       tool / mcp  tokens  flags    
+toolResults                   ~21  truncated
+assistantText                 ~22           

@@ -1,0 +1,14 @@
+peek cost — codex · real-capture-tools-redacted · /3M5DD0J/7K3/6ypIwoGwkp/kHIREQIOZy8jbIe/BRU2ocfyR6peHOCSEL4EXRAUnt3rv0I1E7YY/5DuD7LDKZU/jUnCBrsj
+
+total: —  (76,364 tokens)
+
+by model
+model    turns  tokens   cost
+gpt-5.5      6  76,364  $0.21
+unknown      2       0      —
+
+by tool (token share is a char/4 estimate)
+tool          mcp server  calls  results  ~tokens
+exec_command                  2        2     ~153
+
+cache: 51% hit rate, 0 tokens re-billed on 0 documented misses

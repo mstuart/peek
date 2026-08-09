@@ -1,0 +1,4 @@
+peek compactions — claude-code · compaction · /Users/fixture/project
+
+turn  when              before  after  shrink  ~discarded  ~summary  cost
+   3  2026-08-01 15:00  20,000  3,000  17,000     ~17,040       ~40     —
