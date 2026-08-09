@@ -1,5 +1,5 @@
 {
-  "name": "peek-agent",
+  "name": "@mstuart/peek",
   "version": "0.1.0",
   "description": "DevTools for coding agents — historical context composition, compaction analysis, and cost attribution for Claude Code, Codex, and pi",
   "type": "module",
@@ -33,8 +33,9 @@
     "type": "git",
     "url": "git+https://github.com/mstuart/peek.git"
   },
-  "private": true,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "prepare": "npm run build",
@@ -60,5 +61,8 @@
   },
   "overrides": {
     "esbuild": "^0.28.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

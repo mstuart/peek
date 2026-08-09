@@ -9,7 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node >=20">
   <a href="https://deepwiki.com/mstuart/peek"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-  <!-- Socket badge added at npm-publish time: [![Socket](https://socket.dev/api/badge/npm/package/peek-agent)](https://socket.dev/npm/package/peek-agent) -->
+  <a href="https://www.npmjs.com/package/@mstuart/peek"><img src="https://img.shields.io/npm/v/@mstuart/peek?label=npm" alt="npm"></a>
+  <a href="https://socket.dev/npm/package/@mstuart/peek"><img src="https://socket.dev/api/badge/npm/package/@mstuart/peek" alt="Socket"></a>
 </p>
 
 <p align="center">
@@ -30,15 +31,15 @@ peek reads the session logs your coding agent already writes to disk — Claude 
 
 ## Install
 
-Requires Node 20+. Not yet on npm (`npx peek-agent` is coming); install from source:
+Requires Node 20+. Run it with npx, or install globally:
 
 ```sh
-git clone https://github.com/mstuart/peek.git && cd peek
-npm install && npm run build
-node dist/cli.js list
+npx @mstuart/peek list
+# or
+npm install -g @mstuart/peek
 ```
 
-`npm install -g github:mstuart/peek` also works (it builds on install). Everything runs locally — no telemetry, session data never leaves your machine ([SECURITY.md](SECURITY.md)).
+Prefer source? `git clone https://github.com/mstuart/peek.git && cd peek && npm install && npm run build && node dist/cli.js list`. Everything runs locally — no telemetry, session data never leaves your machine ([SECURITY.md](SECURITY.md)).
 
 ```
 harness      session   cwd                     started           turns  tokens     cost  compactions
