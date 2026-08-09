@@ -1,5 +1,5 @@
-// results.jsonl writer/reader (A4 deliverable #1, DESIGN.md § "Lane A —
-// `peek bench`" "Output": `peek bench run` writes
+// results.jsonl writer/reader (A4 deliverable #1, DESIGN.md § Bench design
+// "Metrics & output": `peek bench run` writes
 // `bench-results/<ISO-ts>/results.jsonl`, one TrialResult per line.
 //
 // Writer: one `appendFile` per trial (open/write/close, not a long-lived

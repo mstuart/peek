@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="https://github.com/mstuart/peek/actions/workflows/ci.yml"><img src="https://github.com/mstuart/peek/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/peek-agent"><img src="https://img.shields.io/npm/v/peek-agent?label=npm" alt="npm"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node >=20">
 </p>

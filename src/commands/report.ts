@@ -1,5 +1,5 @@
-// `peek report` (T5.2, extended v2 Lane E — docs/DESIGN.md § "Lane E —
-// report v2") — docs/DESIGN.md § "CLI surface (v1)": self-contained shareable
+// `peek report` (T5.2, extended v2 Lane E — docs/DESIGN.md § Other v2 subsystems
+// "Report v2") — docs/DESIGN.md § "CLI surface": self-contained shareable
 // HTML artifact.
 //
 // I/O half only. buildReportData is the PURE Session -> ReportData step

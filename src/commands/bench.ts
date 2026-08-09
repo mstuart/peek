@@ -1,4 +1,4 @@
-// `peek bench` (A4 deliverable #4, DESIGN.md § "Lane A — `peek bench`").
+// `peek bench` (A4 deliverable #4, docs/DESIGN.md § Bench design).
 // Three subcommands:
 //   - `peek bench run --suite <dir> --config-a <dir|current> --config-b <dir|current>`
 //     — loads the suite (suite.ts), resolves the two config variants, picks

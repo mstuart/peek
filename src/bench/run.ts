@@ -1,5 +1,5 @@
-// Orchestration loop (A4 deliverable #3, DESIGN.md § "Lane A — `peek
-// bench`" "Trial isolation"): for each task x config x trial (SERIALIZED,
+// Orchestration loop (A4 deliverable #3, DESIGN.md § Bench design
+// "Trial isolation"): for each task x config x trial (SERIALIZED,
 // one at a time — v2.0 spec, removes all transcript races): createWorkspace
 // -> applyConfig -> setup cmds -> runner.run -> verify cmd -> parse
 // sessionPath with peek's adapters -> TrialResult -> append results.jsonl ->
