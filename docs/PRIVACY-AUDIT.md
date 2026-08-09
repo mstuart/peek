@@ -176,3 +176,58 @@ Informational gap on numeric/boolean fields never being touched. All three
 High gaps are latent: nothing currently shipped in the repo is affected, but
 each is a concrete, demonstrated path by which a *future* real capture run
 through `scripts/redact.ts` could leak content.)
+
+## 2026-08-09 addendum (post-audit changes)
+
+Not a re-audit — this section only records what changed in the areas §1–§4
+covered above, dated, without editing the original findings.
+
+**§4's "0 network calls anywhere in `src/`" no longer holds as originally
+stated.** `peek pricing refresh` (`src/commands/pricing.ts` →
+`src/pricing/refresh.ts` → `src/pricing/modelsDev.ts`) now makes one real
+network call: a plain `GET https://models.dev/api.json`, no request body, no
+auth header, no query-string data derived from any session/log content —
+only ever triggered by that one explicit, opt-in CLI command, never by any
+read-only analysis path (`report`/`context`/`cost`/`list`/`diff`/`bench`).
+The original finding is still accurate for library code and every other
+command; it predates this command's addition.
+
+**§4's file-write enumeration omitted two writes that exist today**, both
+under `${XDG_CACHE_HOME:-~/.cache}/peek/`:
+- `src/cache/totals.ts` — `totals-v1.jsonl`, the `list`/`report --all`
+  totals cache (one row per session file: path, mtime, size, totals, cwd,
+  model — see that file's own header).
+- `src/pricing/modelsDev.ts` (written by `refresh.ts`) — `models-dev.json`,
+  the pricing snapshot fetched by the command above.
+
+Both are host-local convenience/cache state, not secrets, but they carry
+real project paths (`cwd`) and are outside the repo tree, so they got
+owner-only permissions rather than default umask: `CACHE_DIR_MODE = 0o700`
+/ `CACHE_FILE_MODE = 0o600` in both files, applied via a best-effort
+`chmod` after every create/write (`tightenPerms()` in each file — `mode` on
+`mkdir`/`writeFileSync` only takes effect the first time a path is
+created, so an explicit chmod is needed to actually guarantee it on
+every subsequent write too). This hardening is landed, not proposed.
+
+**Three findings from a separate privacy-fix pass, same day, fixed and
+tested:**
+- `src/render/html.ts`'s `--json-embed` flag embedded `JSON.stringify(data)`
+  directly inside a `<script type="application/json">` block; a string
+  field containing a literal `</script>` could close that tag early and
+  inject live HTML into an otherwise-static report. Fixed by escaping every
+  `<` in the serialized JSON to its backslash-u-zero-zero-three-c unicode
+  escape before embedding (the standard JSON-in-script escape; `JSON.parse`
+  reverses it losslessly) — regression test in
+  `test/unit/report-command.test.ts`.
+- `src/bench/results.ts` persisted a trial's full raw harness result JSON
+  (`TrialResult.raw`, including the agent's complete response text) verbatim
+  into `bench-results/results.jsonl`, a directory a user's own repo won't
+  gitignore by default. `append()` now redacts `raw` down to an allowlist of
+  cost/usage/error/timing fields before writing, marking the row
+  `rawRedacted: true` — regression test in `test/unit/bench-results.test.ts`.
+- `src/render/html.ts`'s report header embedded the session's full,
+  unshortened `cwd` in the "Working directory" row of a file explicitly
+  positioned as shareable. Now reuses the cross-session dashboard's
+  home-swap + mid-truncate shortening (`shortenCwd`, moved to
+  `src/model/format.ts` so both renderers can share it) — regression tests
+  in `test/unit/report-command.test.ts`.

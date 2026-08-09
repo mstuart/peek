@@ -251,6 +251,42 @@ describe("calculateCost", () => {
       expect(claudeCost.total).toBeLessThan(gptCost.total);
     });
 
+    it("never returns priced:true with a NaN/Infinity component — degrades to an honest unpriced zero (defense-in-depth backstop)", () => {
+      // A hostile/corrupted ModelPrice that slipped past upstream validation (e.g. a future
+      // bug in a cache/snapshot reader) must still never produce priced:true + NaN here — this
+      // is the backstop the honesty invariant relies on regardless of how a bad price arrived.
+      const poisonedPrice: ModelPrice = {
+        input: Number.POSITIVE_INFINITY,
+        output: 0.00002,
+        cacheRead: 0.0000004,
+        cacheCreation5m: 0.000005,
+        cacheCreation1h: 0.000008,
+        tiering: null,
+      };
+      const turn = makeTurn({ usage: { inputUncached: 1000, output: 100 } });
+      const cost = calculateCost(turn, poisonedPrice, "calculate");
+      expect(cost.priced).toBe(false);
+      expect(cost.total).toBe(0);
+      expect(Number.isNaN(cost.total)).toBe(false);
+      expect(Number.isFinite(cost.total)).toBe(true);
+    });
+
+    it("catches NaN arising from 0 * Infinity in a component product", () => {
+      const poisonedPrice: ModelPrice = {
+        input: 0.000004,
+        output: Number.POSITIVE_INFINITY,
+        cacheRead: null,
+        cacheCreation5m: null,
+        cacheCreation1h: null,
+        tiering: null,
+      };
+      // output usage of 0 against an Infinity rate -> NaN component.
+      const turn = makeTurn({ usage: { inputUncached: 1000, output: 0 } });
+      const cost = calculateCost(turn, poisonedPrice, "calculate");
+      expect(cost.priced).toBe(false);
+      expect(cost.total).toBe(0);
+    });
+
     it("unrecognized provider family with tiering fields present: tiering never applied", () => {
       const turn = makeTurn({
         model: "some-other-vendor-model",

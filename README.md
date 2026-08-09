@@ -47,8 +47,8 @@ Every number below is measured, not estimated — reproduce with the pointer in 
 | Claim | Measured | Reproduce |
 |---|---|---|
 | Totals reconcile against ccusage | 0.00% delta, every token class + cost, at matched scope | `docs/DESIGN.md` § Measured results ledger |
-| Real-corpus parse success | 100% — 2,000 most-recently-modified Claude Code sessions (of 11,065 discovered), 67,458 turns, 0 parse failures | `test/local.integration.test.ts` (`PEEK_LOCAL=1`) |
-| `peek bench` self-hosted A/B gate | `current` vs `model=haiku`: both passed `verify`; config-b −93.4% cost ($0.58→$0.04), −19.1% tokens, +1.1s wall | `docs/DESIGN.md` § Measured results ledger; `docs/examples/bench-report.txt` |
+| Real-corpus parse success | 100% — 2,000 most-recently-modified Claude Code sessions (of 11,065 discovered), 67,458 turns, 0 parse failures (point-in-time; the corpus grows) | Verify methodology: `test/local.integration.test.ts` (`PEEK_LOCAL=1`) |
+| `peek bench` self-hosted A/B gate | `current` vs `model=haiku`: both passed `verify`; config-b −93.4% cost ($0.5833→$0.0383), −19.1% tokens, +1.1s wall | `docs/DESIGN.md` § Measured results ledger; `docs/examples/bench-report.txt` |
 | `peek list`, cold vs warm | 6.18s cold (all-miss) → 0.21s warm (totals cache, 7,526 hits, 0 re-parses) | `docs/PERF.md` § "v2 Lane B result" |
 | Codex "near-exact" composition hypothesis | Refuted, published as a correction: residual measured at 67.4% on a real capture, not hidden or restated as success | README's Codex footnote below; `docs/BUILDLOG.md` |
 
@@ -59,9 +59,9 @@ The honest bar is native tooling — Claude Code's own `/context` and `/usage` a
 | | Live context view | Historical composition | Cross-harness | Compaction analysis | Cost attribution depth | Session diff | CLI + JSON |
 |---|---|---|---|---|---|---|---|
 | Native `/context` + `/usage` | Yes — exact, free | No | No | No | Live only (skills/subagents/plugins/MCP) | No | No — slash commands, not scriptable |
-| ccusage (17.8k★) | No | No | Yes — cost totals | No | Totals only; no per-tool/MCP/subagent depth | No | Yes — `-j/--json` |
-| claude-devtools (3.8k★) | No | Yes — 7 categories | No — Claude Code only | Yes — visualization | Yes — per-subagent cost trees; Claude Code only | No | No — GUI only |
-| agent-replay | No | No | Yes — step-level trace | No | No | Yes² — step-level trace diff | Yes — `--json` on `list`/`show`/`diff` |
+| [ccusage](https://github.com/ccusage/ccusage) (17.8k★) | No | No | Yes — cost totals | No | Totals only; no per-tool/MCP/subagent depth | No | Yes — `-j/--json` |
+| [claude-devtools](https://github.com/matt1398/claude-devtools) (3.8k★) | No | Yes — 7 categories | No — Claude Code only | Yes — visualization | Yes — per-subagent cost trees; Claude Code only | No | No — GUI only |
+| [agent-replay](https://github.com/clay-good/agent-replay) | No | No | Yes — step-level trace | No | No | Yes² — step-level trace diff | Yes — `--json` on `list`/`show`/`diff` |
 | **peek** | No — historical only, by design | Yes | Yes — Claude Code, Codex, pi | Yes — shrink/discard timeline | Yes — per-tool/MCP/subagent, cache-waste, miss-reason spikes | Yes² — headline feature | Yes — `--json` everywhere |
 
 ¹ Two concessions, stated plainly: ccusage (17.8k★) already does cross-harness cost *totals*, including weekly history — peek's edge there is attribution *depth* (per-tool/MCP/subagent, cache-waste, miss-reason spikes), not totals themselves. claude-devtools (3.8k★) already does 7-category composition and per-subagent cost trees with a headless Docker mode — but Claude-Code-only, GUI-only (no CLI/`--json`/diff), and hasn't had a code push since 2026-05-13; peek's edge is cross-harness support, scriptability, and diff.
@@ -84,9 +84,15 @@ The honest bar is native tooling — Claude Code's own `/context` and `/usage` a
 
 Requires Node 20+.
 
+peek isn't published to npm yet, so `npx peek-agent list` won't resolve. Install from source instead:
+
 ```sh
-npx peek-agent list
+git clone https://github.com/mstuart/peek.git && cd peek
+npm install && npm run build
+node dist/cli.js list
 ```
+
+Prefer a global `peek` command? `npm install -g github:mstuart/peek` works too (builds automatically via the `prepare` script). (Once published to npm, `npx peek-agent list` will work directly.)
 
 ```
 # real output: peek list, run against fixture sessions (docs/examples/list-basic.txt)
@@ -108,12 +114,12 @@ Every other command below (`context`, `cost`, `compactions`, `diff`, `report`, `
 **1. `peek diff` — composition/cost diff between two sessions.**
 
 ```sh
-peek diff --last 2
+peek diff <session-a> <session-b>
 ```
 
 ```
-$ peek diff <session-a> <session-b>
-# real output: two Claude Code fixture sessions (docs/examples/diff-claude-pair.txt)
+# real output: peek diff test/fixtures/claude-code/v2.1.104/cache-heavy.jsonl test/fixtures/claude-code/v2.1.104/compaction.jsonl
+# (docs/examples/diff-claude-pair.txt)
 peek diff
 
 field     a              b              
@@ -155,7 +161,7 @@ config
 …
 ```
 
-`--last N` also takes any N from 2 to 5: N=2 renders the full table above; N>2 renders a compact pairwise-vs-first comparison instead.
+No session ids handy? `peek diff --last N` (N from 2 to 5) diffs your most recently modified sessions instead — N=2 renders the same full table shown above; N>2 renders a compact pairwise-vs-first comparison.
 
 **2. `peek compactions` — the compaction timeline: what shrank, what was discarded.**
 
@@ -232,14 +238,16 @@ peek report sess-a1b2c3 -o report.html
 <repo>/report.html
 ```
 
+The file contains only aggregated numbers, model/tool names, and a shortened working-directory path (home directory swapped for `~`, long paths mid-truncated) — never message content — so "shareable" is a claim you can check by opening it.
+
 `--all` renders a cross-session trends dashboard instead (day-bucketed cost/tokens, per-project and per-harness breakdowns; default window is the trailing 30 days, widened with `--since`) — measured at 0.223s wall against this machine's real 11k-file/7,526-session corpus, cache-warm (same corpus as the `list` cold/warm numbers in [Proof](#proof)).
 
 ## Bench
 
-Every command above is read-only, historical analysis. `peek bench` is the one command that runs agents: it re-runs your own task suite under two config variants — a `CLAUDE.md`/`AGENTS.md`/`.claude/settings.json`/`model` overlay, or `current` for the repo's own config, unmodified — and diffs the results (success rate, tokens, cost, compactions) using peek's own accounting, not a second cost model. Each trial gets a real agent run in its own isolated `git worktree`, verified by *your* test command (an exit-0/non-zero `verify` step per task file — no LLM-judge in v2.0), then peek parses that trial's own session log for exact tokens, cost, and compaction counts.
+Every command above is read-only, historical analysis. `peek bench` is the one command that runs agents: it re-runs your own task suite under two config variants — a `CLAUDE.md`/`AGENTS.md`/`.claude/settings.json`/`model` overlay, or `current` for the repo's own config, unmodified — and diffs the results (success rate, tokens, cost, compactions) using peek's own accounting, not a second cost model. Each trial gets a real agent run in its own isolated `git worktree`, verified by *your* test command (an exit-0/non-zero `verify` step per task file — no LLM-judge in v2.0), then peek parses that trial's own session log for exact tokens, cost, and compaction counts. Trials call the real Claude/Codex APIs and cost real money — this repo ships the exact suite used for the gate below at `.peek/bench/` so you can try it yourself, but budget for it first (the run below spent $0.58 + $0.04 on one trial per config).
 
 ```sh
-peek bench run --suite .peek/bench --config-a current --config-b .peek/bench/haiku-config
+peek bench run --suite .peek/bench --config-a current --config-b .peek/bench/configs/haiku
 ```
 
 ```
@@ -251,9 +259,9 @@ task        success a   success b  Δ      wall a  wall b  Δ               toke
 hello-file  1/1 (100%)  1/1 (100%)  0.0pp    8.3s    9.4s  +1.1s (+13.5%)    82,902    67,038  -15,864 (-19.1%)   $0.58   $0.04  -$0.54 (-93.4%)              0              0  0
 ```
 
-Both configs passed `verify`; switching the model to haiku cut cost 93.4% ($0.58 → $0.04) and tokens 19.1%, for +1.1s wall. That's a real run, not a projection — the same gate also caught and fixed a real bug (a `slugify` collision) and surfaced a real constraint: worktree trials need a repo with at least one commit.
+Both configs passed `verify`; switching the model to haiku cut cost 93.4% ($0.5833 → $0.0383) and tokens 19.1%, for +1.1s wall. That's a real run, not a projection — the same gate also caught and fixed a real bug (a `slugify` collision) and surfaced a real constraint: worktree trials need a repo with at least one commit.
 
-**Safety, by design:** every run prints an upfront estimate (`N tasks × M trials × 2 configs = K agent runs`) and asks for confirmation (`--yes` skips it); each trial is killed on timeout by signaling its whole detached process group, never a bare `kill(pid)` (which can leak or kill the wrong process); a per-trial hard cost cap rides on claude's own `--max-budget-usd` flag (codex has no equivalent, so codex trials rely on the timeout plus a best-effort cross-trial `--max-cost` ceiling). One thing `peek bench` does **not** do: sandbox the agent. A git worktree is a filesystem convention, not a security boundary — trial agents run with your OS user's permissions, so only point it at task suites you trust.
+**Safety, by design:** every run prints an upfront estimate (`N tasks × M trials × 2 configs = K agent runs`) and asks for confirmation (`--yes` skips it); each trial is killed on timeout by signaling its whole detached process group, never a bare `kill(pid)` (which can leak or kill the wrong process); a per-trial hard cost cap rides on claude's own `--max-budget-usd` flag (codex has no equivalent, so codex trials rely on the timeout plus a best-effort cross-trial `--max-cost` ceiling). One thing `peek bench` does **not** do: sandbox the agent. A git worktree is a filesystem convention, not a security boundary — trial agents run with your OS user's permissions, so only point it at task suites you trust. A first-run or changed suite also requires an explicit trust confirmation (every setup/verify command shown verbatim, direnv-style) before anything runs — `--yes` never bypasses it, only an interactive yes or `--trust-suite` does.
 
 Per harness: **claude-code** is fully gated — the self-hosted result above is real, not projected. **codex** has a working runner, verified with one real trial, but not yet exercised through a full orchestrated A/B. **pi** is deferred to v2.1; the runner interface is harness-agnostic so a pi runner slots in without redesign, but it doesn't exist yet.
 
@@ -291,7 +299,7 @@ Verified, not just designed:
 
 - **100% parse success** on a real-corpus run: 2,000 most-recently-modified Claude Code sessions (of 11,065 discovered, 2.8GB corpus) plus all 4 real Codex rollouts on disk. 67,458 turns, zero parse failures. (`test/local.integration.test.ts`, `PEEK_LOCAL=1`; see [docs/BUILDLOG.md](docs/BUILDLOG.md).)
 - **Clean-room packaging validated**: a fresh `npm ci`, build, `npm pack`, global install from the tarball, and a `peek context` run against a fixture, all outside the working tree. See [docs/CLEANROOM.md](docs/CLEANROOM.md).
-- **Privacy audit**: 0 leaks across everything that would currently ship, and 0 network calls anywhere in `src/`. The audit also found 3 high-severity blind spots in the redaction script used to scrub real-capture fixtures (a depth-unaware key allowlist, an 8-character passthrough on short strings, and a missed Codex branch-name field); all 3 were fixed the same day, with the audit's exact probe inputs now shipped as regression tests. Of the two shipped real-capture fixtures, one was already byte-identical under the hardened rules and one was regenerated to match them; a dedicated regression test now locks both in (re-running the redactor on them reproduces them exactly). See [docs/PRIVACY-AUDIT.md](docs/PRIVACY-AUDIT.md).
+- **Privacy audit**: 0 leaks; the audit's original 0-network-calls finding predates the opt-in pricing-refresh command — see the audit's dated addendum. The audit also found 3 high-severity blind spots in the redaction script used to scrub real-capture fixtures (a depth-unaware key allowlist, an 8-character passthrough on short strings, and a missed Codex branch-name field); all 3 were fixed the same day, with the audit's exact probe inputs now shipped as regression tests. Of the two shipped real-capture fixtures, one was already byte-identical under the hardened rules and one was regenerated to match them; a dedicated regression test now locks both in (re-running the redactor on them reproduces them exactly). See [docs/PRIVACY-AUDIT.md](docs/PRIVACY-AUDIT.md).
 - **Performance profiled** against real local logs (11,159 files, 2.68GB). Single-session `context`/`cost` runs in 28 to 30ms, 70× inside its budget; a 210-file multi-subagent family finishes in about 1.05s, 28× inside its budget. `peek list`'s floor is still single-threaded JSON parsing of ~2.7GB — cold (all-miss) stays at 6.18s — but v2's persistent totals cache (path+mtime+size keyed, under `XDG_CACHE_HOME`) makes every run after the first warm: **0.21s** on the full 7,526-session corpus, 26× inside the 1.5s bar, with 0 re-parses. `--no-cache` forces a full re-parse when you want one (verified, ~5.9s). `--cwd`/`--since`/`--harness` filters still cut the cold case proportionally. See [docs/PERF.md](docs/PERF.md).
 
 **Known limitations:**

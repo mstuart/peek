@@ -23,7 +23,9 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { SessionRef } from "../../model/types.js";
 
-const DEFAULT_ROOT = path.join(homedir(), ".codex", "sessions");
+// Exported so commands/shared.ts's "no sessions found" messages can name the
+// concrete root actually checked instead of a vague "check discovery roots".
+export const DEFAULT_ROOT = path.join(homedir(), ".codex", "sessions");
 
 // Trailing uuid (v4/v7 share the 8-4-4-4-12 hex shape) immediately before
 // `.jsonl`, e.g. rollout-2026-08-08T15-13-23-019fe370-1c75-7323-a8c7-

@@ -51,7 +51,7 @@
 // gateway-only model is preferable to no price at all.
 // ---------------------------------------------------------------------------
 
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { ModelPrice, TieredModelPrice } from "./lookup.js";
@@ -278,6 +278,69 @@ function isValidSnapshot(value: unknown): value is ModelsDevSnapshot {
   return true;
 }
 
+/** A price field must be a finite, non-negative number — mirrors lookup.ts's numOrNull()
+ * shape-check but additionally rejects NaN/Infinity/negative, which numOrNull doesn't (that
+ * module only ever sees the vendored, trusted LiteLLM snapshot; this one reads a cache file
+ * that's plain JSON on disk and can be hand-edited to anything "typeof number" accepts, e.g.
+ * `1/0`-style Infinity via JSON's `1e999`). */
+function isValidPriceNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isValidNullablePriceNumber(value: unknown): boolean {
+  return value === null || isValidPriceNumber(value);
+}
+
+function isValidTiering(value: unknown): boolean {
+  if (value === null) return true;
+  if (typeof value !== "object") return false;
+  const t = value as Record<string, unknown>;
+  if (t.thresholdTokens !== 200_000) return false;
+  const optionalFields = [
+    "input",
+    "output",
+    "cacheRead",
+    "cacheCreation5m",
+    "cacheCreation1h",
+  ] as const;
+  for (const key of optionalFields) {
+    if (key in t && !isValidPriceNumber(t[key])) return false;
+  }
+  return true;
+}
+
+/** Validates a single cached ModelPrice leaf: input/output required finite >=0 numbers,
+ * the three nullable cache fields either null or finite >=0, tiering either null or
+ * well-shaped. Mirrors the finiteness/sign guarantee mapModelsDevPayload's toModelPrice
+ * establishes for network-fetched data — needed again here because this is the disk-read
+ * path, which trusts a file that isn't re-validated at fetch time. */
+function isValidModelPrice(value: unknown): value is ModelPrice {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  if (!isValidPriceNumber(p.input)) return false;
+  if (!isValidPriceNumber(p.output)) return false;
+  if (!isValidNullablePriceNumber(p.cacheRead)) return false;
+  if (!isValidNullablePriceNumber(p.cacheCreation5m)) return false;
+  if (!isValidNullablePriceNumber(p.cacheCreation1h)) return false;
+  if (!isValidTiering(p.tiering)) return false;
+  return true;
+}
+
+/** Drops any model entry whose price leaves fail validation, rather than rejecting the whole
+ * snapshot: a single poisoned/hand-edited model entry (e.g. `"input":"not-a-number"`) shouldn't
+ * take down fallback pricing for every other model the cache still has good data for. Per-entry
+ * drop is the deliberate, less-surprising choice here — the alternative (reject-on-any-bad-leaf)
+ * would turn one corrupt row into a total fallback-pricing outage. */
+function sanitizeSnapshotModels(
+  models: Record<string, unknown>,
+): Record<string, ModelPrice> {
+  const result: Record<string, ModelPrice> = {};
+  for (const [modelId, price] of Object.entries(models)) {
+    if (isValidModelPrice(price)) result[modelId] = price;
+  }
+  return result;
+}
+
 function readCachedSnapshotFromDisk(
   cachePath: string,
 ): ModelsDevSnapshot | null {
@@ -286,6 +349,16 @@ function readCachedSnapshotFromDisk(
     raw = readFileSync(cachePath, "utf8");
   } catch {
     return null; // missing/unreadable — silently ignored, per PLAN's opt-in-refresh design
+  }
+  // File existed and was readable — tighten it (and its dir) to owner-only in case it
+  // was left loose by a peek version predating refresh.ts's permission hardening.
+  // Best-effort: a failed chmod here is silently ignored, same rationale as
+  // refresh.ts's write-side tightenPerms.
+  try {
+    chmodSync(cachePath, 0o600);
+    chmodSync(path.dirname(cachePath), 0o700);
+  } catch {
+    // best-effort — ignore
   }
 
   let parsed: unknown;
@@ -300,7 +373,12 @@ function readCachedSnapshotFromDisk(
   if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > CACHE_MAX_AGE_MS)
     return null; // stale
 
-  return parsed;
+  return {
+    fetchedAt: parsed.fetchedAt,
+    models: sanitizeSnapshotModels(
+      parsed.models as unknown as Record<string, unknown>,
+    ),
+  };
 }
 
 // Memoized by resolved cache path (not a single flat flag) so distinct paths — as used by

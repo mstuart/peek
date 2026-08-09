@@ -20,14 +20,13 @@
 
 import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Command } from "commander";
 import { priceSession, sessionTotals } from "../engine/accounting.js";
 import { byMcpServer, byModel, byTool } from "../engine/attribution.js";
 import { diffSessions } from "../engine/diff.js";
-import { formatCost } from "../model/format.js";
+import { formatCost, shortenCwd } from "../model/format.js";
 import type {
   CompactionEvent,
   HarnessId,
@@ -468,21 +467,6 @@ function extractDashboardSessionRow(
   };
 }
 
-const DASHBOARD_HOME = homedir();
-
-/** "/Users/me/git/peek" -> "~/git/peek". Mirrors commands/list.ts's private
- * shortenCwd exactly — duplicated rather than imported, since that helper is
- * module-private there and list.ts is outside this task's touch-list. */
-function shortenCwdForDashboard(cwd: string, maxLen = 40): string {
-  const withHome = cwd.startsWith(DASHBOARD_HOME)
-    ? `~${cwd.slice(DASHBOARD_HOME.length)}`
-    : cwd;
-  if (withHome.length <= maxLen) return withHome;
-  const parts = withHome.split("/");
-  if (parts.length <= 3) return withHome;
-  return `${parts[0]}/…/${parts.slice(-2).join("/")}`;
-}
-
 function dayKeyUTC(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -643,7 +627,7 @@ export function buildDashboardData(
     .sort((a, b) => b.cost - a.cost)
     .slice(0, DASHBOARD_TOP_PROJECTS)
     .map((agg) => ({
-      cwdLabel: shortenCwdForDashboard(agg.cwd),
+      cwdLabel: shortenCwd(agg.cwd),
       sessions: agg.sessions,
       tokens: agg.tokens,
       costLabel: formatCost(agg.cost),
