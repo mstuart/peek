@@ -2,13 +2,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 
-const FIXTURES_ROOT = path.join(__dirname, "../fixtures/claude-code");
+const FIXTURES_ROOT = path.join(import.meta.dirname, "../fixtures/claude-code");
 
 describe("discoverClaudeSessions", () => {
   it("finds all 9 main sessions in v2.1.104, each kind main", async () => {
     const refs = await discoverClaudeSessions([FIXTURES_ROOT]);
     const v104 = refs.filter((r) =>
-      r.path.includes(`${path.sep}v2.1.104${path.sep}`),
+      r.path.includes(`${path.sep}v2.1.104${path.sep}`)
     );
 
     expect(v104).toHaveLength(9);
@@ -19,7 +19,9 @@ describe("discoverClaudeSessions", () => {
       expect(ref.sizeBytes).toBeGreaterThan(0);
       expect(ref.mtime).toBeInstanceOf(Date);
     }
-    const ids = v104.map((r) => r.id).sort();
+    const ids = v104
+      .map((r) => r.id)
+      .sort((left, right) => left.localeCompare(right));
     expect(ids).toEqual(
       [
         "cache-heavy",
@@ -31,7 +33,7 @@ describe("discoverClaudeSessions", () => {
         "streaming-split",
         "tool-use-names",
         "unknown-type-and-model",
-      ].sort(),
+      ].sort()
     );
   });
 
@@ -39,10 +41,12 @@ describe("discoverClaudeSessions", () => {
     const refs = await discoverClaudeSessions([FIXTURES_ROOT]);
     const mains = refs.filter(
       (r) =>
-        r.kind === "main" && r.path.includes(`${path.sep}v2.1.225${path.sep}`),
+        r.kind === "main" && r.path.includes(`${path.sep}v2.1.225${path.sep}`)
     );
 
-    expect(mains.map((r) => r.id).sort()).toEqual([
+    expect(
+      mains.map((r) => r.id).sort((left, right) => left.localeCompare(right))
+    ).toEqual([
       "20000000-2000-4200-8200-200000000001",
       "20000000-2000-4200-8200-200000000003",
       "streaming-split-compaction",
@@ -68,7 +72,7 @@ describe("discoverClaudeSessions", () => {
 
     const fabricatedMain = refs.find(
       (r) =>
-        r.kind === "main" && r.id === "20000000-2000-4200-8200-200000000002",
+        r.kind === "main" && r.id === "20000000-2000-4200-8200-200000000002"
     );
     expect(fabricatedMain).toBeUndefined();
   });

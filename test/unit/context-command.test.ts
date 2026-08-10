@@ -31,22 +31,24 @@
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { discoverCodexSessions } from "../../src/adapters/codex/discover.js";
 import { parseCodexSession } from "../../src/adapters/codex/parse.js";
 import { parsePiSession } from "../../src/adapters/pi/parse.js";
 import {
-  RESIDUAL_LABEL,
   buildContextReport,
   buildTurnDetail,
+  RESIDUAL_LABEL,
   resolveSession,
 } from "../../src/commands/context.js";
 import { finalizeCompactions } from "../../src/engine/compaction.js";
 import { computeComposition } from "../../src/engine/composition.js";
 import { dedupTurns } from "../../src/engine/dedup.js";
 import type { Session, SessionRef } from "../../src/model/types.js";
+
+const TEST_PATTERN_1 = /no session found/;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
@@ -56,7 +58,9 @@ const PI_FIXTURES_ROOT = join(__dirname, "../fixtures/pi");
 async function processedClaudeSession(fixtureName: string): Promise<Session> {
   const refs = await discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.path.endsWith(`${fixtureName}.jsonl`));
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureName}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureName}`);
+  }
   const { session } = await parseClaudeSession(ref);
   const deduped: Session = { ...session, turns: dedupTurns(session.turns) };
   return finalizeCompactions(computeComposition(deduped));
@@ -65,7 +69,9 @@ async function processedClaudeSession(fixtureName: string): Promise<Session> {
 async function processedCodexSession(fixtureId: string): Promise<Session> {
   const refs = await discoverCodexSessions([CODEX_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.id === fixtureId);
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureId}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureId}`);
+  }
   const { session } = await parseCodexSession(ref);
   const deduped: Session = { ...session, turns: dedupTurns(session.turns) };
   return finalizeCompactions(computeComposition(deduped));
@@ -75,13 +81,13 @@ function piRef(): SessionRef {
   return {
     harness: "pi",
     id: "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+    kind: "main",
+    mtime: new Date(0),
     path: join(
       PI_FIXTURES_ROOT,
-      "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
+      "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl"
     ),
     sizeBytes: 0,
-    mtime: new Date(0),
-    kind: "main",
   };
 }
 
@@ -107,33 +113,35 @@ describe("buildContextReport — claude cache-heavy fixture", () => {
     expect(report.turns).toHaveLength(2);
 
     const [first, second] = report.turns;
+    assert(first);
+    assert(second);
     expect(first?.contextTotal).toBe(1750); // exact, from usage — not char/4
     expect(first?.categories).toEqual([
-      { category: "userText", tokens: 10, tokensLabel: "~10", pct: 10 / 1750 },
+      { category: "userText", pct: 10 / 1750, tokens: 10, tokensLabel: "~10" },
       {
         category: "assistantText",
+        pct: 11 / 1750,
         tokens: 11,
         tokensLabel: "~11",
-        pct: 11 / 1750,
       },
     ]);
     expect(first?.residual).toEqual({
+      label: RESIDUAL_LABEL,
+      pct: 1729 / 1750,
       tokens: 1729,
       tokensLabel: "1,729", // unprefixed — residual is not itself a char/4 read
-      pct: 1729 / 1750,
-      label: RESIDUAL_LABEL,
     });
     // Σ categories + residual = contextTotal invariant, visible in the report shape.
-    const firstSum = (first?.categories ?? []).reduce(
-      (s, c) => s + c.tokens,
-      0,
+    const firstSum = first.categories.reduce(
+      (sum, category) => sum + category.tokens,
+      0
     );
-    expect(firstSum + (first?.residual.tokens ?? 0)).toBe(first?.contextTotal);
+    expect(firstSum + first.residual.tokens).toBe(first?.contextTotal);
 
     // second turn: categories accumulate forward within the (compaction-free) phase.
     expect(second?.contextTotal).toBe(1200);
-    expect(second?.categories.map((c) => c.tokens)).toEqual([19, 24]);
-    expect(second?.residual.tokens).toBe(1157);
+    expect(second.categories.map((c) => c.tokens)).toEqual([19, 24]);
+    expect(second.residual.tokens).toBe(1157);
   });
 });
 
@@ -155,35 +163,38 @@ describe("buildContextReport — claude compaction fixture", () => {
     expect(report.separators).toEqual([
       {
         beforeTurnNumber: 3, // event.turnIndex (2) + 1
-        shrinkExact: 17000,
         label: "compaction: shrunk 17,000 tokens (exact)",
+        shrinkExact: 17_000,
       },
     ]);
 
     // zero-usage (isApiErrorMessage) turn: no categories, zero residual —
     // never a fabricated composition for a turn with no real contextTotal.
-    expect(report.turns[1]?.contextTotal).toBe(0);
-    expect(report.turns[1]?.categories).toEqual([]);
-    expect(report.turns[1]?.residual.tokens).toBe(0);
+    const apiError = report.turns.at(1);
+    assert(apiError);
+    expect(apiError.contextTotal).toBe(0);
+    expect(apiError.categories).toEqual([]);
+    expect(apiError.residual.tokens).toBe(0);
 
     // post-compaction turn: reset phase, compactionSummaries category present.
-    const post = report.turns[2];
-    expect(post?.contextTotal).toBe(3000);
+    const post = report.turns.at(2);
+    assert(post);
+    expect(post.contextTotal).toBe(3000);
     expect(post?.categories).toEqual([
       {
         category: "assistantText",
+        pct: 15 / 3000,
         tokens: 15,
         tokensLabel: "~15",
-        pct: 15 / 3000,
       },
       {
         category: "compactionSummaries",
+        pct: 40 / 3000,
         tokens: 40,
         tokensLabel: "~40",
-        pct: 40 / 3000,
       },
     ]);
-    expect(post?.residual.tokens).toBe(2945);
+    expect(post.residual.tokens).toBe(2945);
   });
 });
 
@@ -206,7 +217,7 @@ describe("buildContextReport — codex full-turn fixture", () => {
     const report = buildContextReport(session);
     const withUsage = report.turns.find((t) => t.contextTotal > 0);
     expect(withUsage).toBeDefined();
-    expect(withUsage?.contextTotal).toBe(18420);
+    expect(withUsage?.contextTotal).toBe(18_420);
 
     const categoryNames = withUsage?.categories.map((c) => c.category);
     expect(categoryNames).toEqual([
@@ -221,8 +232,8 @@ describe("buildContextReport — codex full-turn fixture", () => {
 
     // Residual shrinks by exactly the seeded amount (74 + 212 = 286):
     // 18,264 -> 17,978, 99.2% -> 97.6%.
-    expect(withUsage?.residual.tokens).toBe(17978);
-    expect(withUsage?.residual.pct).toBeCloseTo(17978 / 18420, 10);
+    expect(withUsage?.residual.tokens).toBe(17_978);
+    expect(withUsage?.residual.pct).toBeCloseTo(17_978 / 18_420, 10);
     expect(withUsage?.residual.label).toBe(RESIDUAL_LABEL);
   });
 });
@@ -245,18 +256,18 @@ describe("buildContextReport — pi fixture", () => {
     expect(withUsage).toBeDefined();
     expect(withUsage?.contextTotal).toBe(1600);
     expect(withUsage?.categories).toEqual([
-      { category: "userText", tokens: 7, tokensLabel: "~7", pct: 7 / 1600 },
+      { category: "userText", pct: 7 / 1600, tokens: 7, tokensLabel: "~7" },
       {
         category: "assistantText",
+        pct: 7 / 1600,
         tokens: 7,
         tokensLabel: "~7",
-        pct: 7 / 1600,
       },
       {
         category: "toolCallArgs",
+        pct: 5 / 1600,
         tokens: 5,
         tokensLabel: "~5",
-        pct: 5 / 1600,
       },
     ]);
     expect(withUsage?.residual.tokens).toBe(1581);
@@ -266,7 +277,7 @@ describe("buildContextReport — pi fixture", () => {
     // the accumulator never gets a "thinking" span to fold in here.
     for (const turn of report.turns) {
       expect(
-        turn.categories.find((c) => c.category === "thinking"),
+        turn.categories.find((c) => c.category === "thinking")
       ).toBeUndefined();
     }
   });
@@ -288,7 +299,7 @@ describe("honesty convention — ~ prefix on char/4 estimates, residual unprefix
     ]);
 
     expect(RESIDUAL_LABEL).toBe(
-      "system prompt + tool schemas + framing (not logged by this harness)",
+      "system prompt + tool schemas + framing (not logged by this harness)"
     );
 
     for (const session of sessions) {
@@ -297,7 +308,7 @@ describe("honesty convention — ~ prefix on char/4 estimates, residual unprefix
         for (const category of turn.categories) {
           expect(category.tokensLabel.startsWith("~")).toBe(true);
           expect(category.tokensLabel).toBe(
-            `~${category.tokens.toLocaleString("en-US")}`,
+            `~${category.tokens.toLocaleString("en-US")}`
           );
         }
         expect(turn.residual.tokensLabel.startsWith("~")).toBe(false);
@@ -324,10 +335,10 @@ describe("buildTurnDetail", () => {
     expect(spans).toEqual([
       {
         category: "toolCallArgs",
-        toolName: "search_code",
         mcpServer: "github",
         tokensEst: 13, // ceil(49 / 4)
         tokensLabel: "~13",
+        toolName: "search_code",
         truncated: false,
         turnRole: "assistant",
       },
@@ -362,7 +373,9 @@ describe("resolveSession", () => {
   it("resolves a direct file path regardless of --harness", async () => {
     const refs = await discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
     const target = refs.find((r) => r.path.endsWith("cache-heavy.jsonl"));
-    if (!target) throw new Error("fixture missing");
+    if (!target) {
+      throw new Error("fixture missing");
+    }
     const ref = await resolveSession(target.path, {});
     expect(ref.id).toBe("cache-heavy");
   });
@@ -380,7 +393,7 @@ describe("resolveSession", () => {
       resolveSession("does-not-exist", {
         harness: "claude-code",
         roots: { "claude-code": [CLAUDE_FIXTURES_ROOT] },
-      }),
-    ).rejects.toThrow(/no session found/);
+      })
+    ).rejects.toThrow(TEST_PATTERN_1);
   });
 });

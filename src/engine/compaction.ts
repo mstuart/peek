@@ -33,11 +33,13 @@ function isRealUsageTurn(turn: Pick<Turn, "contextTotal">): boolean {
 /** Last real-usage turn strictly before `beforeIndex`, skipping zero-usage turns. */
 export function findTokensBefore(
   turns: readonly Turn[],
-  beforeIndex: number,
+  beforeIndex: number
 ): number | null {
-  for (let i = Math.min(beforeIndex, turns.length) - 1; i >= 0; i--) {
+  for (let i = Math.min(beforeIndex, turns.length) - 1; i >= 0; i -= 1) {
     const turn = turns[i];
-    if (turn && isRealUsageTurn(turn)) return turn.contextTotal;
+    if (turn && isRealUsageTurn(turn)) {
+      return turn.contextTotal;
+    }
   }
   return null;
 }
@@ -51,11 +53,13 @@ export function findTokensBefore(
  */
 export function findTokensAfter(
   turns: readonly Turn[],
-  fromIndex: number,
+  fromIndex: number
 ): number | null {
-  for (let i = Math.max(fromIndex, 0); i < turns.length; i++) {
+  for (let i = Math.max(fromIndex, 0); i < turns.length; i += 1) {
     const turn = turns[i];
-    if (turn && isRealUsageTurn(turn)) return turn.contextTotal;
+    if (turn && isRealUsageTurn(turn)) {
+      return turn.contextTotal;
+    }
   }
   return null;
 }
@@ -72,14 +76,14 @@ export function findTokensAfter(
 export function computeCompactionDeltas(
   tokensBeforeExact: number | null,
   tokensAfterExact: number | null,
-  summaryTokensEst: number,
+  summaryTokensEst: number
 ): { shrinkExact: number | null; discardedEst: number | null } {
   if (tokensBeforeExact === null || tokensAfterExact === null) {
-    return { shrinkExact: null, discardedEst: null };
+    return { discardedEst: null, shrinkExact: null };
   }
   return {
-    shrinkExact: tokensBeforeExact - tokensAfterExact,
     discardedEst: tokensBeforeExact - tokensAfterExact + summaryTokensEst,
+    shrinkExact: tokensBeforeExact - tokensAfterExact,
   };
 }
 
@@ -94,7 +98,7 @@ export function computeCompactionDeltas(
  */
 export function finalizeCompactionEvent(
   event: CompactionEvent,
-  turns: readonly Turn[],
+  turns: readonly Turn[]
 ): CompactionEvent {
   const tokensBeforeExact =
     event.tokensBeforeExact ?? findTokensBefore(turns, event.turnIndex);
@@ -105,20 +109,20 @@ export function finalizeCompactionEvent(
     // Already computed (by an adapter, or a previous finalize pass) —
     // leave the deltas untouched; only backfill before/after if somehow
     // still null (defensive; not reachable from any current adapter).
-    return { ...event, tokensBeforeExact, tokensAfterExact };
+    return { ...event, tokensAfterExact, tokensBeforeExact };
   }
 
   const { shrinkExact, discardedEst } = computeCompactionDeltas(
     tokensBeforeExact,
     tokensAfterExact,
-    event.summaryTokensEst,
+    event.summaryTokensEst
   );
   return {
     ...event,
-    tokensBeforeExact,
-    tokensAfterExact,
-    shrinkExact,
     discardedEst,
+    shrinkExact,
+    tokensAfterExact,
+    tokensBeforeExact,
   };
 }
 
@@ -136,7 +140,7 @@ export function finalizeCompactions(session: Session): Session {
   const events = session.events.map((event) =>
     isCompactionEvent(event)
       ? finalizeCompactionEvent(event, session.turns)
-      : event,
+      : event
   );
   return { ...session, events };
 }

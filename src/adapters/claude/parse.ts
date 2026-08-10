@@ -51,6 +51,9 @@ import {
   extractUserContentSpans,
 } from "./spans.js";
 
+const AGENT_TRANSCRIPT_RE = /^agent-(.+)\.jsonl$/;
+const FILE_EXTENSION_RE = /\.[^./]+$/;
+
 const COMPOSITION_CATEGORIES: readonly CompositionCategory[] = [
   "userText",
   "assistantText",
@@ -66,7 +69,9 @@ const COMPOSITION_CATEGORIES: readonly CompositionCategory[] = [
 
 function zeroComposition(): Composition {
   const categories = {} as Record<CompositionCategory, number>;
-  for (const category of COMPOSITION_CATEGORIES) categories[category] = 0;
+  for (const category of COMPOSITION_CATEGORIES) {
+    categories[category] = 0;
+  }
   return { categories, residual: 0, residualShare: 0, truncated: false };
 }
 
@@ -74,24 +79,28 @@ function zeroComposition(): Composition {
 // not-yet-priced rather than "priced at zero".
 function zeroCost(): CostBreakdown {
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: 0,
+    cacheWrite5m: 0,
+    input: 0,
     mode: "auto",
+    output: 0,
     priced: false,
+    total: 0,
   };
 }
 
 function getProp(obj: unknown, key: string): unknown {
-  if (typeof obj !== "object" || obj === null) return undefined;
+  if (typeof obj !== "object" || obj === null) {
+    return;
+  }
   return (obj as Record<string, unknown>)[key];
 }
 
 function parseTimestamp(value: unknown): Date | undefined {
-  if (typeof value !== "string") return undefined;
+  if (typeof value !== "string") {
+    return;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
@@ -99,13 +108,14 @@ function parseTimestamp(value: unknown): Date | undefined {
 /** First non-empty string value of `key` across records, in file order. */
 function firstStringField(
   records: RawClaudeRecord[],
-  key: string,
+  key: string
 ): string | undefined {
   for (const record of records) {
     const value = record.raw[key];
-    if (typeof value === "string" && value.length > 0) return value;
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
   }
-  return undefined;
 }
 
 /**
@@ -124,10 +134,10 @@ function buildTurnUsage(usageRaw: unknown): NormalizedUsage {
   }
 
   const acc: NormalizedUsage = {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
     raw: usageRaw,
   };
@@ -155,9 +165,9 @@ function buildAssistantTurn(
   record: RawClaudeRecord,
   events: SessionEvent[],
   pendingUserSpans: Span[],
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn {
-  const raw = record.raw;
+  const { raw } = record;
   const message = (raw.message ?? {}) as Record<string, unknown>;
   const model = typeof message.model === "string" ? message.model : "unknown";
   const timestamp = parseTimestamp(raw.timestamp) ?? new Date(0);
@@ -169,34 +179,34 @@ function buildAssistantTurn(
     ? [...pendingUserSpans, ...extractAssistantContentSpans(message.content)]
     : [];
 
-  const diagnostics = message.diagnostics;
+  const { diagnostics } = message;
   const cacheMissReason = getProp(diagnostics, "cache_miss_reason");
 
   const contextManagement = message.context_management;
   const appliedEdits = getProp(contextManagement, "applied_edits");
   if (Array.isArray(appliedEdits) && appliedEdits.length > 0) {
-    events.push({ kind: "contextEdit", at: timestamp, raw: appliedEdits });
+    events.push({ at: timestamp, kind: "contextEdit", raw: appliedEdits });
   }
 
   if (raw.isApiErrorMessage === true) {
     events.push({
-      kind: "error",
       at: timestamp,
+      kind: "error",
       message: "api-error assistant record",
       raw: { messageId: message.id },
     });
   }
 
   return {
-    role: "assistant",
-    model,
-    timestamp,
-    contentSpans,
-    usage,
-    contextTotal: contextTotal(usage),
     composition: zeroComposition(), // T2.3 fills real values
+    contentSpans,
+    contextTotal: contextTotal(usage),
     cost: zeroCost(), // T2.2 fills real values
-    ...(cacheMissReason !== undefined ? { cacheMissReason } : {}),
+    model,
+    role: "assistant",
+    timestamp,
+    usage,
+    ...(cacheMissReason === undefined ? {} : { cacheMissReason }),
   };
 }
 
@@ -218,17 +228,22 @@ async function walkSubagentRefs(
   dir: string,
   parentId: string,
   cwd: string,
-  refs: SessionRef[],
+  refs: SessionRef[]
 ): Promise<void> {
   for (const entry of await readDirSafe(dir)) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      // biome-ignore lint/performance/noAwaitInLoops: Keep recursive filesystem traversal bounded.
       await walkSubagentRefs(full, parentId, cwd, refs);
       continue;
     }
-    if (!entry.isFile()) continue;
-    const match = /^agent-(.+)\.jsonl$/.exec(entry.name);
-    if (!match) continue;
+    if (!entry.isFile()) {
+      continue;
+    }
+    const match = AGENT_TRANSCRIPT_RE.exec(entry.name);
+    if (!match) {
+      continue;
+    }
     const id = match[1] as string;
     let info: { size: number; mtime: Date };
     try {
@@ -237,26 +252,31 @@ async function walkSubagentRefs(
       continue;
     }
     refs.push({
+      cwd,
       harness: "claude-code",
       id,
-      path: full,
-      cwd,
-      sizeBytes: info.size,
-      mtime: info.mtime,
       kind: "subagent",
+      mtime: info.mtime,
       parentId,
+      path: full,
+      sizeBytes: info.size,
     });
   }
 }
 
 async function findChildRefs(
   ref: SessionRef,
-  cwd: string,
+  cwd: string
 ): Promise<SessionRef[]> {
   const sessionDir = path.join(path.dirname(ref.path), ref.id);
   const refs: SessionRef[] = [];
   await walkSubagentRefs(path.join(sessionDir, "subagents"), ref.id, cwd, refs);
-  refs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  refs.sort((a, b) => {
+    if (a.path < b.path) {
+      return -1;
+    }
+    return a.path > b.path ? 1 : 0;
+  });
   return refs;
 }
 
@@ -271,11 +291,15 @@ async function computeOffloadedToolIds(ref: SessionRef): Promise<Set<string>> {
   const sessionDir = path.join(path.dirname(ref.path), ref.id);
   const ids = new Set<string>();
   for (const entry of await readDirSafe(
-    path.join(sessionDir, "tool-results"),
+    path.join(sessionDir, "tool-results")
   )) {
-    if (!entry.isFile()) continue;
-    const id = entry.name.replace(/\.[^./]+$/, "");
-    if (id) ids.add(id);
+    if (!entry.isFile()) {
+      continue;
+    }
+    const id = entry.name.replace(FILE_EXTENSION_RE, "");
+    if (id) {
+      ids.add(id);
+    }
   }
   return ids;
 }
@@ -291,9 +315,10 @@ export interface ParseClaudeSessionOptions {
   spans?: boolean;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Transcript dispatch intentionally handles tolerant wire variants in one pass.
 export async function parseClaudeSession(
   ref: SessionRef,
-  opts: ParseClaudeSessionOptions = {},
+  opts: ParseClaudeSessionOptions = {}
 ): Promise<ParseResult> {
   const spansEnabled = opts.spans ?? true;
   const { records, warnings: readWarnings } = await readClaudeRecords(ref.path);
@@ -307,8 +332,12 @@ export async function parseClaudeSession(
   let endedAt: Date | undefined;
   for (const record of records) {
     const ts = parseTimestamp(record.raw.timestamp);
-    if (!ts) continue;
-    if (!startedAt) startedAt = ts;
+    if (!ts) {
+      continue;
+    }
+    if (!startedAt) {
+      startedAt = ts;
+    }
     endedAt = ts;
   }
 
@@ -326,14 +355,16 @@ export async function parseClaudeSession(
     if (record.type === "user") {
       if (spansEnabled) {
         pendingUserSpans.push(
-          ...extractUserContentSpans(record, offloadedToolIds, toolUseIndex),
+          ...extractUserContentSpans(record, offloadedToolIds, toolUseIndex)
         );
       }
       continue;
     }
-    if (record.type !== "assistant") continue;
+    if (record.type !== "assistant") {
+      continue;
+    }
     turns.push(
-      buildAssistantTurn(record, events, pendingUserSpans, spansEnabled),
+      buildAssistantTurn(record, events, pendingUserSpans, spansEnabled)
     );
     turnLines.push(record.line);
     pendingUserSpans = [];
@@ -351,16 +382,17 @@ export async function parseClaudeSession(
   // Second pass: compaction events, anchored against the now-complete turns[]
   // (anchoring needs to look both before AND after the marker's position).
   const anchorTurns: AnchorableTurn[] = turns.map((turn, i) => ({
-    line: turnLines[i] as number,
     contextTotal: turn.contextTotal,
     isApiError:
       (turn.usage.raw as Record<string, unknown>).isApiErrorMessage === true,
+    line: turnLines[i] as number,
   }));
 
   for (const record of records) {
-    if (record.type !== "user" || record.raw.isCompactSummary !== true)
+    if (record.type !== "user" || record.raw.isCompactSummary !== true) {
       continue;
-    const message = record.raw.message;
+    }
+    const { message } = record.raw;
     const content =
       typeof message === "object" && message !== null
         ? (message as Record<string, unknown>).content
@@ -375,20 +407,20 @@ export async function parseClaudeSession(
   const children = await findChildRefs(ref, cwd);
 
   const session: Session = {
+    cwd,
     harness: "claude-code",
     harnessVersion,
     id: ref.id,
-    cwd,
-    ...(gitBranch !== undefined ? { gitBranch } : {}),
-    startedAt: startedAt ?? new Date(0),
-    endedAt: endedAt ?? startedAt ?? new Date(0),
+    ...(gitBranch === undefined ? {} : { gitBranch }),
+    children,
     configSnapshot: {
       model: lastTurn?.model ?? "unknown",
       modelChanges: [], // "mode"/"permission-mode" record handling is T1.5+
     },
-    turns,
+    endedAt: endedAt ?? startedAt ?? new Date(0),
     events,
-    children,
+    startedAt: startedAt ?? new Date(0),
+    turns,
     warnings,
   };
 

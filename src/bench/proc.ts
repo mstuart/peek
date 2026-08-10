@@ -21,16 +21,18 @@ export interface SpawnDetachedOptions {
 
 export interface SpawnDetachedResult {
   exitCode: number | null;
-  timedOut: boolean;
-  stdout: string;
   stderrTail: string;
+  stdout: string;
+  timedOut: boolean;
 }
 
 /** Keeps only the last `maxBytes` UTF-8 bytes of `tail + chunk`. */
 function appendTail(tail: string, chunk: string, maxBytes: number): string {
   const combined = tail + chunk;
   const buf = Buffer.from(combined, "utf8");
-  if (buf.byteLength <= maxBytes) return combined;
+  if (buf.byteLength <= maxBytes) {
+    return combined;
+  }
   return buf.subarray(buf.byteLength - maxBytes).toString("utf8");
 }
 
@@ -45,7 +47,7 @@ function appendTail(tail: string, chunk: string, maxBytes: number): string {
 export function spawnDetached(
   cmd: string,
   args: string[],
-  options: SpawnDetachedOptions,
+  options: SpawnDetachedOptions
 ): Promise<SpawnDetachedResult> {
   return new Promise((resolve) => {
     let stdout = "";
@@ -55,33 +57,39 @@ export function spawnDetached(
     let killTimer: NodeJS.Timeout | undefined;
 
     function finish(exitCode: number | null): void {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       clearTimeout(timeoutTimer);
-      if (killTimer) clearTimeout(killTimer);
-      resolve({ exitCode, timedOut, stdout, stderrTail });
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+      resolve({ exitCode, stderrTail, stdout, timedOut });
     }
 
     let child: ChildProcess;
     try {
       child = spawn(cmd, args, {
         cwd: options.cwd,
-        env: options.env ?? process.env,
         detached: true,
+        env: options.env ?? process.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
     } catch (err) {
       resolve({
         exitCode: null,
-        timedOut: false,
-        stdout: "",
         stderrTail: err instanceof Error ? err.message : String(err),
+        stdout: "",
+        timedOut: false,
       });
       return;
     }
 
     function killGroup(signal: NodeJS.Signals): void {
-      if (child.pid === undefined) return;
+      if (child.pid === undefined) {
+        return;
+      }
       try {
         process.kill(-child.pid, signal);
       } catch {
@@ -96,7 +104,7 @@ export function spawnDetached(
       stderrTail = appendTail(
         stderrTail,
         chunk.toString("utf8"),
-        STDERR_TAIL_BYTES,
+        STDERR_TAIL_BYTES
       );
     });
 

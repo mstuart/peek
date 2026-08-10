@@ -30,17 +30,17 @@ import { sessionTotals } from "../engine/accounting.js";
 import type { HarnessId, Session, SessionRef } from "../model/types.js";
 
 export interface TotalsCacheRow {
-  path: string;
-  mtimeMs: number;
-  size: number;
+  compactions: number;
+  cwd: string;
+  endedAt: string;
   harness: HarnessId;
+  model: string;
+  mtimeMs: number;
+  path: string;
+  size: number;
+  startedAt: string; // ISO — cache rows are plain JSON, not USM Session objects
   totals: SessionTotals;
   turns: number;
-  compactions: number;
-  startedAt: string; // ISO — cache rows are plain JSON, not USM Session objects
-  endedAt: string;
-  cwd: string;
-  model: string;
 }
 
 /** Builds a cache row from an already deduped+priced session (list's
@@ -48,17 +48,17 @@ export interface TotalsCacheRow {
  * exactly what commands/list.ts's buildListRow reads off a Session. */
 export function toCacheRow(ref: SessionRef, session: Session): TotalsCacheRow {
   return {
-    path: ref.path,
-    mtimeMs: ref.mtime.getTime(),
-    size: ref.sizeBytes,
+    compactions: session.events.filter((e) => e.kind === "compaction").length,
+    cwd: session.cwd,
+    endedAt: session.endedAt.toISOString(),
     harness: ref.harness,
+    model: session.configSnapshot.model,
+    mtimeMs: ref.mtime.getTime(),
+    path: ref.path,
+    size: ref.sizeBytes,
+    startedAt: session.startedAt.toISOString(),
     totals: sessionTotals(session),
     turns: session.turns.length,
-    compactions: session.events.filter((e) => e.kind === "compaction").length,
-    startedAt: session.startedAt.toISOString(),
-    endedAt: session.endedAt.toISOString(),
-    cwd: session.cwd,
-    model: session.configSnapshot.model,
   };
 }
 
@@ -74,26 +74,59 @@ function isFiniteNonNegative(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Cache-boundary validation checks every persisted field explicitly.
 function isValidRow(value: unknown): value is TotalsCacheRow {
-  if (typeof value !== "object" || value === null) return false;
-  const r = value as Record<string, unknown>;
-  if (typeof r.path !== "string") return false;
-  if (typeof r.mtimeMs !== "number") return false;
-  if (typeof r.size !== "number") return false;
-  if (typeof r.harness !== "string" || !HARNESS_IDS.has(r.harness as HarnessId))
+  if (typeof value !== "object" || value === null) {
     return false;
-  if (!isFiniteNonNegative(r.turns)) return false;
-  if (!isFiniteNonNegative(r.compactions)) return false;
-  if (typeof r.startedAt !== "string") return false;
-  if (typeof r.endedAt !== "string") return false;
-  if (typeof r.cwd !== "string") return false;
-  if (typeof r.model !== "string") return false;
+  }
+  const r = value as Record<string, unknown>;
+  if (typeof r.path !== "string") {
+    return false;
+  }
+  if (typeof r.mtimeMs !== "number") {
+    return false;
+  }
+  if (typeof r.size !== "number") {
+    return false;
+  }
+  if (
+    typeof r.harness !== "string" ||
+    !HARNESS_IDS.has(r.harness as HarnessId)
+  ) {
+    return false;
+  }
+  if (!isFiniteNonNegative(r.turns)) {
+    return false;
+  }
+  if (!isFiniteNonNegative(r.compactions)) {
+    return false;
+  }
+  if (typeof r.startedAt !== "string") {
+    return false;
+  }
+  if (typeof r.endedAt !== "string") {
+    return false;
+  }
+  if (typeof r.cwd !== "string") {
+    return false;
+  }
+  if (typeof r.model !== "string") {
+    return false;
+  }
 
-  if (typeof r.totals !== "object" || r.totals === null) return false;
+  if (typeof r.totals !== "object" || r.totals === null) {
+    return false;
+  }
   const totals = r.totals as Record<string, unknown>;
-  if (!isFiniteNonNegative(totals.cost)) return false;
-  if (typeof totals.priced !== "boolean") return false;
-  if (typeof totals.tokens !== "object" || totals.tokens === null) return false;
+  if (!isFiniteNonNegative(totals.cost)) {
+    return false;
+  }
+  if (typeof totals.priced !== "boolean") {
+    return false;
+  }
+  if (typeof totals.tokens !== "object" || totals.tokens === null) {
+    return false;
+  }
   const tokens = totals.tokens as Record<string, unknown>;
   const tokenKeys = [
     "inputUncached",
@@ -104,14 +137,18 @@ function isValidRow(value: unknown): value is TotalsCacheRow {
     "contextTotal",
   ] as const;
   for (const key of tokenKeys) {
-    if (!isFiniteNonNegative(tokens[key])) return false;
+    if (!isFiniteNonNegative(tokens[key])) {
+      return false;
+    }
   }
   return true;
 }
 
 /** `${XDG_CACHE_HOME ?? ~/.cache}/peek/totals-v1.jsonl`. */
 function resolveCachePath(override?: string): string {
-  if (override) return override;
+  if (override) {
+    return override;
+  }
   const base = process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache");
   return path.join(base, "peek", "totals-v1.jsonl");
 }
@@ -141,12 +178,12 @@ export interface TotalsCache {
   /** A row matches only when path+mtimeMs+size ALL match `ref` — any drift
    * (file touched, resized, or the ref pointing somewhere else entirely) is
    * treated as a miss, never a stale hit. */
-  lookup(ref: SessionRef): TotalsCacheRow | undefined;
+  lookup: (ref: SessionRef) => TotalsCacheRow | undefined;
   /** Appends `rows` to the on-disk cache and updates the in-memory index.
    * Triggers a full compaction rewrite (tmp-file + rename) when the file's
    * accumulated line count exceeds 2x the live (deduped-by-path) row
    * count. */
-  upsert(rows: readonly TotalsCacheRow[]): Promise<void>;
+  upsert: (rows: readonly TotalsCacheRow[]) => Promise<void>;
 }
 
 class TotalsCacheImpl implements TotalsCache {
@@ -159,7 +196,7 @@ class TotalsCacheImpl implements TotalsCache {
   constructor(
     cachePath: string,
     rows: Map<string, TotalsCacheRow>,
-    linesOnDisk: number,
+    linesOnDisk: number
   ) {
     this.cachePath = cachePath;
     this.rows = rows;
@@ -168,20 +205,26 @@ class TotalsCacheImpl implements TotalsCache {
 
   lookup(ref: SessionRef): TotalsCacheRow | undefined {
     const row = this.rows.get(ref.path);
-    if (!row) return undefined;
+    if (!row) {
+      return;
+    }
     if (row.mtimeMs !== ref.mtime.getTime() || row.size !== ref.sizeBytes) {
-      return undefined;
+      return;
     }
     return row;
   }
 
   async upsert(newRows: readonly TotalsCacheRow[]): Promise<void> {
-    if (newRows.length === 0) return;
+    if (newRows.length === 0) {
+      return;
+    }
 
-    for (const row of newRows) this.rows.set(row.path, row);
+    for (const row of newRows) {
+      this.rows.set(row.path, row);
+    }
 
     const dir = path.dirname(this.cachePath);
-    await mkdir(dir, { recursive: true, mode: CACHE_DIR_MODE });
+    await mkdir(dir, { mode: CACHE_DIR_MODE, recursive: true });
     tightenPerms(dir, CACHE_DIR_MODE);
     const lines = `${newRows.map((r) => JSON.stringify(r)).join("\n")}\n`;
     appendFileSync(this.cachePath, lines, {
@@ -219,7 +262,7 @@ class TotalsCacheImpl implements TotalsCache {
  * `cachePathOverride` is a test-only escape hatch; production callers omit
  * it and get the real XDG-resolved path. */
 export async function loadCache(
-  cachePathOverride?: string,
+  cachePathOverride?: string
 ): Promise<TotalsCache> {
   const cachePath = resolveCachePath(cachePathOverride);
   const rows = new Map<string, TotalsCacheRow>();
@@ -232,15 +275,19 @@ export async function loadCache(
     tightenPerms(cachePath, CACHE_FILE_MODE);
     tightenPerms(path.dirname(cachePath), CACHE_DIR_MODE);
     for (const line of raw.split("\n")) {
-      if (line.trim() === "") continue;
-      lineCount++;
+      if (line.trim() === "") {
+        continue;
+      }
+      lineCount += 1;
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);
       } catch {
         continue; // corrupt JSON — skip this line, keep reading
       }
-      if (!isValidRow(parsed)) continue; // wrong/stale shape — skip this line
+      if (!isValidRow(parsed)) {
+        continue; // wrong/stale shape — skip this line
+      }
       rows.set(parsed.path, parsed); // last write for a path wins
     }
   } catch {

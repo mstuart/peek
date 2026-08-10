@@ -45,7 +45,9 @@ export function toNumber(value: unknown): number {
 }
 
 export function prop(raw: unknown, key: string): unknown {
-  if (!isRecord(raw)) return undefined;
+  if (!isRecord(raw)) {
+    return;
+  }
   return raw[key];
 }
 
@@ -54,20 +56,22 @@ export function prop(raw: unknown, key: string): unknown {
 // parse time (T6.4).
 export function zeroComposition(): Composition {
   const categories = {} as Record<CompositionCategory, number>;
-  for (const category of COMPOSITION_CATEGORIES) categories[category] = 0;
+  for (const category of COMPOSITION_CATEGORIES) {
+    categories[category] = 0;
+  }
   return { categories, residual: 0, residualShare: 0, truncated: false };
 }
 
 export function zeroDisplayCost(): CostBreakdown {
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: 0,
+    cacheWrite5m: 0,
+    input: 0,
     mode: "display",
+    output: 0,
     priced: false,
+    total: 0,
   };
 }
 
@@ -82,7 +86,9 @@ export function zeroDisplayCost(): CostBreakdown {
  */
 export function buildDisplayCost(usageRaw: unknown): CostBreakdown {
   const costRaw = prop(usageRaw, "cost");
-  if (!isRecord(costRaw)) return zeroDisplayCost();
+  if (!isRecord(costRaw)) {
+    return zeroDisplayCost();
+  }
 
   const input = toNumber(prop(costRaw, "input"));
   const output = toNumber(prop(costRaw, "output"));
@@ -105,14 +111,14 @@ export function buildDisplayCost(usageRaw: unknown): CostBreakdown {
   }
 
   return {
-    input,
-    output,
     cacheRead,
-    cacheWrite5m,
     cacheWrite1h,
-    total,
+    cacheWrite5m,
+    input,
     mode: "display",
+    output,
     priced: true,
+    total,
   };
 }
 
@@ -127,16 +133,18 @@ export function mapTurnRole(role: string): TurnRole | undefined {
     case "custom":
       return "user";
     default:
-      return undefined;
+      return;
   }
 }
 
 export function messageTimestamp(
   entry: PiEntry,
-  message: Record<string, unknown>,
+  message: Record<string, unknown>
 ): Date {
   const ts = message.timestamp;
-  if (typeof ts === "number") return new Date(ts);
+  if (typeof ts === "number") {
+    return new Date(ts);
+  }
   return new Date(entry.timestamp);
 }
 
@@ -149,13 +157,17 @@ export function buildMessageTurn(
   entry: PiEntry,
   lastKnownModel: string,
   pendingSpans: Span[],
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): { turn: Turn; newModel?: string } | undefined {
   const message = prop(entry.data, "message");
-  if (!isRecord(message) || typeof message.role !== "string") return undefined;
+  if (!isRecord(message) || typeof message.role !== "string") {
+    return;
+  }
 
   const turnRole = mapTurnRole(message.role);
-  if (!turnRole) return undefined;
+  if (!turnRole) {
+    return;
+  }
 
   const timestamp = messageTimestamp(entry, message);
 
@@ -173,16 +185,16 @@ export function buildMessageTurn(
       ? [...pendingSpans, ...extractAssistantMessageSpans(message.content)]
       : [];
     const turn: Turn = {
-      role: "assistant",
-      model,
-      timestamp,
-      contentSpans,
-      usage,
-      contextTotal: contextTotal(usage),
       composition: zeroComposition(),
+      contentSpans,
+      contextTotal: contextTotal(usage),
       cost,
+      model,
+      role: "assistant",
+      timestamp,
+      usage,
     };
-    return { turn, newModel: model };
+    return { newModel: model, turn };
   }
 
   // user / toolResult / bashExecution / embedded custom: no numeric usage
@@ -191,14 +203,14 @@ export function buildMessageTurn(
   const usage = normalizePiUsage(undefined);
   usage.raw = message;
   const turn: Turn = {
-    role: turnRole,
-    model: lastKnownModel,
-    timestamp,
-    contentSpans: [],
-    usage,
-    contextTotal: 0,
     composition: zeroComposition(),
+    contentSpans: [],
+    contextTotal: 0,
     cost: zeroDisplayCost(),
+    model: lastKnownModel,
+    role: turnRole,
+    timestamp,
+    usage,
   };
   return { turn };
 }
@@ -212,7 +224,7 @@ export function buildMessageTurn(
  */
 export function buildCompactionEvent(
   entry: PiEntry,
-  turnIndex: number,
+  turnIndex: number
 ): CompactionEvent {
   const tokensBeforeRaw = prop(entry.data, "tokensBefore");
   const tokensBeforeExact =
@@ -229,14 +241,14 @@ export function buildCompactionEvent(
       : null;
 
   return {
-    kind: "compaction",
     at: new Date(entry.timestamp),
-    turnIndex,
-    tokensBeforeExact,
-    tokensAfterExact: null, // engine fills from the next turn's contextTotal
-    shrinkExact: null, // engine computes (before − after)
-    discardedEst: null, // engine computes
-    summaryTokensEst,
     cost,
+    discardedEst: null, // engine computes
+    kind: "compaction",
+    shrinkExact: null, // engine computes (before − after)
+    summaryTokensEst,
+    tokensAfterExact: null, // engine fills from the next turn's contextTotal
+    tokensBeforeExact,
+    turnIndex,
   };
 }

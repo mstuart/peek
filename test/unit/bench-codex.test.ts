@@ -21,17 +21,19 @@ import {
 } from "../../src/bench/runners/codex.js";
 import type { TrialSpec } from "../../src/bench/types.js";
 
+const TEST_PATTERN_1 = /budget/i;
+
 function trialSpec(overrides: Partial<TrialSpec> = {}): TrialSpec {
   return {
+    configName: "current",
     task: {
       name: "fix-flaky-test",
       prompt: "Fix the failing test in tests/date.test.ts",
-      verify: "npm test",
       timeoutS: 600,
+      verify: "npm test",
     },
-    configName: "current",
-    workspaceDir: "/workspaces/target-trial",
     timeoutS: 600,
+    workspaceDir: "/workspaces/target-trial",
     ...overrides,
   };
 }
@@ -43,28 +45,28 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { force: true, recursive: true });
 });
 
 function writeRollout(
   dir: string,
   fileName: string,
   cwd: string | undefined,
-  mtime: Date,
+  mtime: Date
 ): void {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, fileName);
   const line1 =
     cwd === undefined
       ? JSON.stringify({
+          payload: {},
           timestamp: mtime.toISOString(),
           type: "session_meta",
-          payload: {},
         })
       : JSON.stringify({
+          payload: { cwd },
           timestamp: mtime.toISOString(),
           type: "session_meta",
-          payload: { cwd },
         });
   writeFileSync(file, `${line1}\n{"type":"other"}\n`);
   utimesSync(file, mtime, mtime);
@@ -78,25 +80,25 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       dayDir,
       "rollout-a.jsonl",
       "/workspaces/other-trial-a",
-      new Date("2026-08-08T16:00:00.000Z"),
+      new Date("2026-08-08T16:00:00.000Z")
     );
     writeRollout(
       dayDir,
       "rollout-b.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-08T17:05:00.000Z"),
+      new Date("2026-08-08T17:05:00.000Z")
     );
     writeRollout(
       dayDir,
       "rollout-c.jsonl",
       "/workspaces/other-trial-c",
-      new Date("2026-08-08T17:10:00.000Z"),
+      new Date("2026-08-08T17:10:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBe(join(dayDir, "rollout-b.jsonl"));
   });
@@ -108,19 +110,19 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       dayDir,
       "rollout-older.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-08T17:01:00.000Z"),
+      new Date("2026-08-08T17:01:00.000Z")
     );
     writeRollout(
       dayDir,
       "rollout-newer.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-08T17:09:00.000Z"),
+      new Date("2026-08-08T17:09:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBe(join(dayDir, "rollout-newer.jsonl"));
   });
@@ -132,19 +134,19 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       dayDir,
       "rollout-a.jsonl",
       "/workspaces/other-trial-a",
-      new Date("2026-08-08T17:01:00.000Z"),
+      new Date("2026-08-08T17:01:00.000Z")
     );
     writeRollout(
       dayDir,
       "rollout-b.jsonl",
       "/workspaces/other-trial-b",
-      new Date("2026-08-08T17:02:00.000Z"),
+      new Date("2026-08-08T17:02:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBeUndefined();
   });
@@ -154,7 +156,7 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBeUndefined();
   });
@@ -168,13 +170,13 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       dayDir,
       "rollout-good.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-08T17:05:00.000Z"),
+      new Date("2026-08-08T17:05:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBe(join(dayDir, "rollout-good.jsonl"));
   });
@@ -186,13 +188,13 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       nextDayDir,
       "rollout-past-midnight.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-09T00:02:00.000Z"),
+      new Date("2026-08-09T00:02:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBe(join(nextDayDir, "rollout-past-midnight.jsonl"));
   });
@@ -204,13 +206,13 @@ describe("resolveCodexRollout — cwd-match resolution", () => {
       farDir,
       "rollout-stale.jsonl",
       "/workspaces/target-trial",
-      new Date("2026-08-05T17:00:00.000Z"),
+      new Date("2026-08-05T17:00:00.000Z")
     );
 
     const resolved = await resolveCodexRollout(
       "/workspaces/target-trial",
       trialStart,
-      root,
+      root
     );
     expect(resolved).toBeUndefined();
   });
@@ -248,6 +250,6 @@ describe("buildCodexArgs — flag assembly", () => {
 
   it("does not emit any budget-related flag, even when perTrialBudgetUsd is set (no native flag for codex)", () => {
     const args = buildCodexArgs(trialSpec({ perTrialBudgetUsd: 0.5 }));
-    expect(args.join(" ")).not.toMatch(/budget/i);
+    expect(args.join(" ")).not.toMatch(TEST_PATTERN_1);
   });
 });

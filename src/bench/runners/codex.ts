@@ -1,7 +1,7 @@
 // codex bench runner (Lane A, task A3). docs/DESIGN.md § Bench design > "Trial isolation".
 
 import type { Dirent } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnDetached } from "../proc.js";
@@ -55,17 +55,19 @@ async function firstLineCwd(file: string): Promise<string | undefined> {
   try {
     content = await readFile(file, "utf8");
   } catch {
-    return undefined;
+    return;
   }
   const nlIdx = content.indexOf("\n");
   const firstLine = (nlIdx === -1 ? content : content.slice(0, nlIdx)).trim();
-  if (!firstLine) return undefined;
+  if (!firstLine) {
+    return;
+  }
   try {
     const parsed = JSON.parse(firstLine) as { payload?: { cwd?: unknown } };
     const cwd = parsed.payload?.cwd;
     return typeof cwd === "string" ? cwd : undefined;
   } catch {
-    return undefined;
+    // Ignore malformed first lines while scanning candidate transcripts.
   }
 }
 
@@ -84,29 +86,33 @@ async function firstLineCwd(file: string): Promise<string | undefined> {
 export async function resolveCodexRollout(
   workspaceDir: string,
   trialStart: Date,
-  sessionsRoot: string = DEFAULT_SESSIONS_ROOT,
+  sessionsRoot: string = DEFAULT_SESSIONS_ROOT
 ): Promise<string | undefined> {
   const nextDay = new Date(trialStart.getTime() + 24 * 60 * 60 * 1000);
   const dirs = [
     ...new Set(
       [dateDirParts(trialStart), dateDirParts(nextDay)].map((parts) =>
-        path.join(sessionsRoot, ...parts),
-      ),
+        path.join(sessionsRoot, ...parts)
+      )
     ),
   ];
 
   const candidates: string[] = [];
   for (const dir of dirs) {
+    // biome-ignore lint/performance/noAwaitInLoops: Bound filesystem traversal across session directories.
     candidates.push(...(await listJsonlFiles(dir)));
   }
 
   let best: { file: string; mtimeMs: number } | undefined;
   for (const file of candidates) {
+    // biome-ignore lint/performance/noAwaitInLoops: Candidate inspection is intentionally bounded.
     const cwd = await firstLineCwd(file);
-    if (cwd !== workspaceDir) continue;
+    if (cwd !== workspaceDir) {
+      continue;
+    }
     let mtimeMs: number;
     try {
-      mtimeMs = (await stat(file)).mtimeMs;
+      ({ mtimeMs } = await stat(file));
     } catch {
       continue;
     }
@@ -145,14 +151,14 @@ export const codexRunner: BenchRunner = {
 
     const sessionPath = await resolveCodexRollout(
       trial.workspaceDir,
-      startedAt,
+      startedAt
     );
 
     return {
       exitCode: proc.exitCode,
       timedOut: proc.timedOut,
       wallMs,
-      ...(sessionPath !== undefined ? { sessionPath } : {}),
+      ...(sessionPath === undefined ? {} : { sessionPath }),
       stderrTail: proc.stderrTail,
     };
   },

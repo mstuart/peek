@@ -8,7 +8,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { discoverCodexSessions } from "../../src/adapters/codex/discover.js";
@@ -19,16 +19,16 @@ import {
   loadFinalizedSession,
 } from "../../src/commands/compactions.js";
 import {
-  type CostAllEntry,
   buildCostAllReport,
   buildCostReport,
+  type CostAllEntry,
   loadPricedSession,
   runCostCommand,
 } from "../../src/commands/cost.js";
 import {
+  buildListReport,
   DEFAULT_LIST_LIMIT,
   type ListEntry,
-  buildListReport,
   runListCommand,
 } from "../../src/commands/list.js";
 import { resolveSessionRef } from "../../src/commands/shared.js";
@@ -44,6 +44,21 @@ import { finalizeCompactions } from "../../src/engine/compaction.js";
 import { dedupSession } from "../../src/engine/dedup.js";
 import type { Session, SessionRef } from "../../src/model/types.js";
 
+const TEST_PATTERN_1 = /by tool/;
+const TEST_PATTERN_2 = /^(claude-code|codex|pi)\b/;
+const TEST_PATTERN_3 =
+  /…and 7 more sessions \(use --limit <n> or --limit 0 for all\)/;
+const TEST_PATTERN_4 = /more session/;
+const TEST_PATTERN_5 = /no sessions found/;
+const TEST_PATTERN_6 = /claude-code|pi/;
+const TEST_PATTERN_7 = /mergeAttribution|merged the same way/;
+const TEST_PATTERN_8 = /by model/;
+const TEST_PATTERN_9 = /by MCP server/;
+const TEST_PATTERN_10 =
+  /--harness claude-code was given but .* is a codex session/;
+const TEST_PATTERN_11 = /not a recognized session file/;
+const TEST_PATTERN_12 = /ambiguous session id prefix/;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
@@ -56,11 +71,13 @@ interface RefAndSession {
 
 async function dedupedClaudeSession(
   fixtureName: string,
-  root: string = CLAUDE_FIXTURES_ROOT,
+  root: string = CLAUDE_FIXTURES_ROOT
 ): Promise<RefAndSession> {
   const refs = await discoverClaudeSessions([root]);
   const ref = refs.find((r) => r.path.endsWith(`${fixtureName}.jsonl`));
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureName}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureName}`);
+  }
   const { session } = await parseClaudeSession(ref);
   return { ref, session: dedupSession(session) };
 }
@@ -68,7 +85,9 @@ async function dedupedClaudeSession(
 async function dedupedCodexSession(fixtureId: string): Promise<RefAndSession> {
   const refs = await discoverCodexSessions([CODEX_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.id === fixtureId);
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureId}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureId}`);
+  }
   const { session } = await parseCodexSession(ref);
   return { ref, session: dedupSession(session) };
 }
@@ -77,14 +96,14 @@ function piRef(id: string, filename: string): SessionRef {
   return {
     harness: "pi",
     id,
+    kind: "main",
+    mtime: new Date(0),
     path: join(
       PI_FIXTURES_ROOT,
       "system-a-v3/--Users-fake-project--",
-      filename,
+      filename
     ),
     sizeBytes: 0,
-    mtime: new Date(0),
-    kind: "main",
   };
 }
 
@@ -105,14 +124,16 @@ async function dedupFamilyFixture(): Promise<[Session, Session]> {
   const parentRef = all.find(
     (r) =>
       r.id === "20000000-2000-4200-8200-200000000001" &&
-      r.path.includes(`${sep}v2.1.225${sep}`),
+      r.path.includes(`${sep}v2.1.225${sep}`)
   );
-  if (!parentRef)
+  if (!parentRef) {
     throw new Error("fixture ref not found: v2.1.225 family parent");
+  }
   const { session: parentRaw } = await parseClaudeSession(parentRef);
-  const childRef = parentRaw.children[0];
-  if (!childRef)
+  const childRef = parentRaw.children.at(0);
+  if (!childRef) {
     throw new Error("unreachable: family fixture has no child ref");
+  }
   const { session: childRaw } = await parseClaudeSession(childRef);
 
   const parent = priceSession(dedupSession(parentRaw), { mode: "auto" });
@@ -131,8 +152,8 @@ describe("buildListReport", () => {
     const pi = await dedupedPiSession(
       piRef(
         "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
-        "2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
-      ),
+        "2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl"
+      )
     );
 
     const entries: ListEntry[] = [
@@ -164,14 +185,15 @@ describe("buildListReport", () => {
     const priced = priceSession(claude.session, { mode: "auto" });
     const report = buildListReport([{ ref: claude.ref, session: priced }]);
 
-    const row = report.rows[0];
+    const row = report.rows.at(0);
+    assert(row);
     expect(row?.harness).toBe("claude-code");
     expect(row?.turns).toBe(2);
     // turn1 contextTotal 1750 + turn2 1200 (same fixture as
     // context-command.test.ts's cache-heavy assertions).
     expect(row?.tokensTotal).toBe(2950);
     expect(row?.priced).toBe(true);
-    expect(row?.costLabel.startsWith("$")).toBe(true);
+    expect(row.costLabel.startsWith("$")).toBe(true);
     expect(row?.compactionCount).toBe(0);
   });
 
@@ -180,9 +202,10 @@ describe("buildListReport", () => {
     const priced = priceSession(codex.session, { mode: "auto" });
     const report = buildListReport([{ ref: codex.ref, session: priced }]);
 
-    const row = report.rows[0];
+    const row = report.rows.at(0);
+    assert(row);
     expect(row?.priced).toBe(true);
-    expect(row?.costLabel.startsWith("$")).toBe(true);
+    expect(row.costLabel.startsWith("$")).toBe(true);
   });
 
   it("claude compaction fixture: compactionCount reflects the session's one CompactionEvent", async () => {
@@ -208,7 +231,7 @@ describe("buildListReport", () => {
         const { session } = await parseClaudeSession(ref);
         const priced = priceSession(dedupSession(session), { mode: "auto" });
         return { ref, session: priced };
-      }),
+      })
     );
 
     const defaultReport = buildListReport(entries);
@@ -247,7 +270,7 @@ describe("runListCommand — --limit / empty-results messaging", () => {
   };
 
   async function runAndCapture(
-    opts: Partial<Parameters<typeof runListCommand>[0]>,
+    opts: Partial<Parameters<typeof runListCommand>[0]>
   ): Promise<{ stdout: string }> {
     const originalWrite = process.stdout.write.bind(process.stdout);
     let written = "";
@@ -268,38 +291,36 @@ describe("runListCommand — --limit / empty-results messaging", () => {
     const dataLines = stdout
       .trim()
       .split("\n")
-      .filter((l) => /^(claude-code|codex|pi)\b/.test(l));
+      .filter((l) => TEST_PATTERN_2.test(l));
     expect(dataLines).toHaveLength(5);
-    expect(stdout).toMatch(
-      /…and 7 more sessions \(use --limit <n> or --limit 0 for all\)/,
-    );
+    expect(stdout).toMatch(TEST_PATTERN_3);
   });
 
   it("--limit 0 prints every row with no truncation hint", async () => {
     const { stdout } = await runAndCapture({ limit: 0 });
-    expect(stdout).not.toMatch(/more session/);
+    expect(stdout).not.toMatch(TEST_PATTERN_4);
     const dataLines = stdout
       .trim()
       .split("\n")
-      .filter((l) => /^(claude-code|codex|pi)\b/.test(l));
+      .filter((l) => TEST_PATTERN_2.test(l));
     expect(dataLines).toHaveLength(12); // all main sessions in the fixture tree
   });
 
   it("default limit (DEFAULT_LIST_LIMIT) shows no hint when under the cap", async () => {
     expect(DEFAULT_LIST_LIMIT).toBe(50);
     const { stdout } = await runAndCapture({});
-    expect(stdout).not.toMatch(/more session/);
+    expect(stdout).not.toMatch(TEST_PATTERN_4);
   });
 
   it("--json ignores --limit entirely — always the full report", async () => {
-    const { stdout } = await runAndCapture({ limit: 1, json: true });
+    const { stdout } = await runAndCapture({ json: true, limit: 1 });
     const report = JSON.parse(stdout) as { rows: unknown[] };
     expect(report.rows).toHaveLength(12);
   });
 
   it("empty results (exit-0 case) name the concrete roots that were checked", async () => {
     const { stdout } = await runAndCapture({ roots: ALL_EMPTY_ROOTS });
-    expect(stdout).toMatch(/no sessions found/);
+    expect(stdout).toMatch(TEST_PATTERN_5);
     // All three roots resolved to the same tmp dir here, but the message
     // must be built from the actual resolved roots, not a hardcoded string.
     expect(stdout).toContain(emptyDir);
@@ -307,11 +328,11 @@ describe("runListCommand — --limit / empty-results messaging", () => {
 
   it("empty results scoped by --harness only name that harness's root", async () => {
     const { stdout } = await runAndCapture({
-      roots: ALL_EMPTY_ROOTS,
       harness: "codex",
+      roots: ALL_EMPTY_ROOTS,
     });
     expect(stdout).toContain(emptyDir);
-    expect(stdout).not.toMatch(/claude-code|pi/);
+    expect(stdout).not.toMatch(TEST_PATTERN_6);
   });
 });
 
@@ -365,7 +386,7 @@ describe("buildCostReport", () => {
     const report = buildCostReport(priced);
 
     expect(report.cache.missReasons).toHaveLength(1);
-    const entry = report.cache.missReasons[0];
+    const entry = report.cache.missReasons.at(0);
     expect(entry?.type).toBe("system_changed");
     expect(entry?.cacheMissedInputTokensLabel).toBe("4,500");
     expect(report.cache.wasteTokensLabel).toBe("4,500");
@@ -399,21 +420,21 @@ describe("mergeAttribution", () => {
     const codexPriced = priceSession(codex.session, { mode: "auto" });
 
     const claudeGithub = byMcpServer(claudePriced).find(
-      (s) => s.mcpServer === "github",
+      (s) => s.mcpServer === "github"
     );
     const codexGithub = byMcpServer(codexPriced).find(
-      (s) => s.mcpServer === "github",
+      (s) => s.mcpServer === "github"
     );
     expect(claudeGithub).toBeDefined();
     expect(codexGithub).toBeDefined();
 
     const merged = mergeAttribution([[claudePriced], [codexPriced]]);
     const githubRows = merged.byMcpServer.filter(
-      (s) => s.mcpServer === "github",
+      (s) => s.mcpServer === "github"
     );
     // One merged bucket, not two side-by-side per-harness rows.
     expect(githubRows).toHaveLength(1);
-    const mergedGithub = githubRows[0];
+    const mergedGithub = githubRows.at(0);
 
     expect(mergedGithub?.tools.slice().sort()).toEqual(
       [
@@ -421,42 +442,42 @@ describe("mergeAttribution", () => {
           ...(claudeGithub?.tools ?? []),
           ...(codexGithub?.tools ?? []),
         ]),
-      ].sort(),
+      ].sort()
     );
 
     // Exact arithmetic = sum of the two single-session byMcpServer reports.
     expect(mergedGithub?.totalChars).toBe(
-      (claudeGithub?.totalChars ?? 0) + (codexGithub?.totalChars ?? 0),
+      (claudeGithub?.totalChars ?? 0) + (codexGithub?.totalChars ?? 0)
     );
     expect(mergedGithub?.totalSpanCount).toBe(
-      (claudeGithub?.totalSpanCount ?? 0) + (codexGithub?.totalSpanCount ?? 0),
+      (claudeGithub?.totalSpanCount ?? 0) + (codexGithub?.totalSpanCount ?? 0)
     );
     expect(mergedGithub?.toolCallArgs.spanCount).toBe(
       (claudeGithub?.toolCallArgs.spanCount ?? 0) +
-        (codexGithub?.toolCallArgs.spanCount ?? 0),
+        (codexGithub?.toolCallArgs.spanCount ?? 0)
     );
     expect(mergedGithub?.toolResults.spanCount).toBe(
       (claudeGithub?.toolResults.spanCount ?? 0) +
-        (codexGithub?.toolResults.spanCount ?? 0),
+        (codexGithub?.toolResults.spanCount ?? 0)
     );
     expect(mergedGithub?.tokenShareEst).toBe(
-      Math.ceil((mergedGithub?.totalChars ?? 0) / 4),
+      Math.ceil((mergedGithub?.totalChars ?? 0) / 4)
     );
 
     // byTool: get_issue (claude-only) and search_code (codex-only) stay
     // separate rows — merging is by (toolName, mcpServer), not by server
     // alone — each equal to its single-session figure exactly.
     const claudeGetIssue = byTool(claudePriced).find(
-      (t) => t.toolName === "get_issue",
+      (t) => t.toolName === "get_issue"
     );
     const codexSearchCode = byTool(codexPriced).find(
-      (t) => t.toolName === "search_code",
+      (t) => t.toolName === "search_code"
     );
     const mergedGetIssue = merged.byTool.find(
-      (t) => t.toolName === "get_issue",
+      (t) => t.toolName === "get_issue"
     );
     const mergedSearchCode = merged.byTool.find(
-      (t) => t.toolName === "search_code",
+      (t) => t.toolName === "search_code"
     );
     expect(mergedGetIssue?.totalChars).toBe(claudeGetIssue?.totalChars);
     expect(mergedSearchCode?.totalChars).toBe(codexSearchCode?.totalChars);
@@ -464,7 +485,7 @@ describe("mergeAttribution", () => {
     // byModel: merged turnCount = sum of the two sessions' own turnCounts.
     const mergedTurnCount = merged.byModel.reduce(
       (sum, m) => sum + m.turnCount,
-      0,
+      0
     );
     const singleTurnCount =
       byModel(claudePriced).reduce((sum, m) => sum + m.turnCount, 0) +
@@ -494,10 +515,10 @@ describe("mergeAttribution", () => {
     expect(mergedTask?.totalChars).toBe(parentTask?.totalChars);
     expect(mergedTask?.totalSpanCount).toBe(parentTask?.totalSpanCount);
     expect(mergedTask?.toolCallArgs.spanCount).toBe(
-      parentTask?.toolCallArgs.spanCount,
+      parentTask?.toolCallArgs.spanCount
     );
     expect(mergedTask?.toolResults.spanCount).toBe(
-      parentTask?.toolResults.spanCount,
+      parentTask?.toolResults.spanCount
     );
     // Not the naive (buggy) sum of both sessions' own views.
     expect(mergedTask?.totalSpanCount).toBeLessThan(naiveTaskSpanCount);
@@ -522,7 +543,7 @@ describe("mergeAttribution", () => {
     const naiveTurnCount = parent.turns.length + child.turns.length;
     const mergedTurnCount = merged.byModel.reduce(
       (sum, m) => sum + m.turnCount,
-      0,
+      0
     );
     expect(mergedTurnCount).toBe(naiveTurnCount - 1);
     expect(rollup.combined.tokens.contextTotal).toBeGreaterThan(0);
@@ -538,14 +559,14 @@ describe("buildCostAllReport — merged byModel/byTool/byMcpServer", () => {
 
     const entries: CostAllEntry[] = [
       {
+        family: [claudePriced],
         ref: claude.ref,
         rollup: bySubagent([claudePriced]),
-        family: [claudePriced],
       },
       {
+        family: [codexPriced],
         ref: codex.ref,
         rollup: bySubagent([codexPriced]),
-        family: [codexPriced],
       },
     ];
 
@@ -553,7 +574,7 @@ describe("buildCostAllReport — merged byModel/byTool/byMcpServer", () => {
     expect(report.byHarness).toHaveLength(2); // unchanged existing behavior
 
     const githubRows = report.byMcpServer.filter(
-      (s) => s.mcpServer === "github",
+      (s) => s.mcpServer === "github"
     );
     expect(githubRows).toHaveLength(1); // merged, not one row per harness
 
@@ -566,7 +587,7 @@ describe("buildCostAllReport — merged byModel/byTool/byMcpServer", () => {
       expect(server).not.toHaveProperty("cost");
     }
 
-    expect(report.note).toMatch(/mergeAttribution|merged the same way/);
+    expect(report.note).toMatch(TEST_PATTERN_7);
   });
 });
 
@@ -594,7 +615,9 @@ describe("`peek cost --all --by` — filters human-readable output to one attrib
         json: false,
         roots: CLAUDE_ROOTS_ONLY,
       };
-      if (by !== undefined) opts.by = by;
+      if (by !== undefined) {
+        opts.by = by;
+      }
       await runCostCommand(undefined, opts);
     } finally {
       process.stdout.write = originalWrite;
@@ -604,30 +627,30 @@ describe("`peek cost --all --by` — filters human-readable output to one attrib
 
   it("no --by: all three tables print", async () => {
     const out = await runAndCapture();
-    expect(out).toMatch(/by model/);
-    expect(out).toMatch(/by tool/);
-    expect(out).toMatch(/by MCP server/);
+    expect(out).toMatch(TEST_PATTERN_8);
+    expect(out).toMatch(TEST_PATTERN_1);
+    expect(out).toMatch(TEST_PATTERN_9);
   });
 
   it("--by model: only the model table prints", async () => {
     const out = await runAndCapture("model");
-    expect(out).toMatch(/by model/);
-    expect(out).not.toMatch(/by tool/);
-    expect(out).not.toMatch(/by MCP server/);
+    expect(out).toMatch(TEST_PATTERN_8);
+    expect(out).not.toMatch(TEST_PATTERN_1);
+    expect(out).not.toMatch(TEST_PATTERN_9);
   });
 
   it("--by tool: only the tool table prints", async () => {
     const out = await runAndCapture("tool");
-    expect(out).not.toMatch(/by model/);
-    expect(out).toMatch(/by tool/);
-    expect(out).not.toMatch(/by MCP server/);
+    expect(out).not.toMatch(TEST_PATTERN_8);
+    expect(out).toMatch(TEST_PATTERN_1);
+    expect(out).not.toMatch(TEST_PATTERN_9);
   });
 
   it("--by mcp: only the MCP-server table prints", async () => {
     const out = await runAndCapture("mcp");
-    expect(out).not.toMatch(/by model/);
-    expect(out).not.toMatch(/by tool/);
-    expect(out).toMatch(/by MCP server/);
+    expect(out).not.toMatch(TEST_PATTERN_8);
+    expect(out).not.toMatch(TEST_PATTERN_1);
+    expect(out).toMatch(TEST_PATTERN_9);
   });
 });
 
@@ -642,7 +665,7 @@ describe("buildCompactionsReport", () => {
     const report = buildCompactionsReport(finalized);
 
     expect(report.rows).toHaveLength(1);
-    const row = report.rows[0];
+    const row = report.rows.at(0);
     expect(row?.turnNumber).toBe(3); // event.turnIndex(2) + 1
     expect(row?.beforeLabel).toBe("20,000");
     expect(row?.afterLabel).toBe("3,000");
@@ -657,7 +680,7 @@ describe("buildCompactionsReport", () => {
     const report = buildCompactionsReport(finalized);
 
     expect(report.rows).toHaveLength(1);
-    const row = report.rows[0];
+    const row = report.rows.at(0);
     expect(row?.beforeLabel).toBe("214,300");
     expect(row?.afterLabel).toBe("26,800");
     expect(row?.shrinkLabel).toBe("187,500");
@@ -668,14 +691,14 @@ describe("buildCompactionsReport", () => {
     const pi = await dedupedPiSession(
       piRef(
         "6d816cb4-9915-4741-9571-a436e36f68c5",
-        "2026-08-01T12-45-00-000Z_6d816cb4-9915-4741-9571-a436e36f68c5.jsonl",
-      ),
+        "2026-08-01T12-45-00-000Z_6d816cb4-9915-4741-9571-a436e36f68c5.jsonl"
+      )
     );
     const finalized = finalizeCompactions(pi.session);
     const report = buildCompactionsReport(finalized);
 
     expect(report.rows).toHaveLength(1);
-    const row = report.rows[0];
+    const row = report.rows.at(0);
     expect(row?.beforeLabel).toBe("8,500"); // pi adapter's own tokensBefore
     expect(row?.afterLabel).toBe("1,000"); // engine-filled
     expect(row?.shrinkLabel).toBe("7,500");
@@ -703,20 +726,20 @@ describe("buildCompactionsReport", () => {
 describe("resolveSessionRef — direct-file-path resolution", () => {
   const CODEX_TOOLS_PATH = join(
     CODEX_FIXTURES_ROOT,
-    "v0.134/real-capture-tools-redacted.jsonl",
+    "v0.134/real-capture-tools-redacted.jsonl"
   );
   const CODEX_COMPACTION_PATH = join(
     CODEX_FIXTURES_ROOT,
-    "v0.134/compaction.jsonl",
+    "v0.134/compaction.jsonl"
   );
   const CLAUDE_PATH = join(CLAUDE_FIXTURES_ROOT, "v2.1.104/cache-heavy.jsonl");
   const PI_SYSTEM_A_PATH = join(
     PI_FIXTURES_ROOT,
-    "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
+    "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl"
   );
   const PI_SYSTEM_B_PATH = join(
     PI_FIXTURES_ROOT,
-    "system-b-v4/2026-08-01T16-00-00-000Z_b9f0fc61-c03e-49c7-a148-e1e7c660822c.jsonl",
+    "system-b-v4/2026-08-01T16-00-00-000Z_b9f0fc61-c03e-49c7-a148-e1e7c660822c.jsonl"
   );
 
   it("codex-by-path resolution regression: a codex fixture by path resolves as codex, not claude-code", async () => {
@@ -762,10 +785,8 @@ describe("resolveSessionRef — direct-file-path resolution", () => {
 
   it("--harness mismatch against sniffed content errors clearly instead of proceeding", async () => {
     await expect(
-      resolveSessionRef(CODEX_TOOLS_PATH, { harness: "claude-code" }),
-    ).rejects.toThrow(
-      /--harness claude-code was given but .* is a codex session/,
-    );
+      resolveSessionRef(CODEX_TOOLS_PATH, { harness: "claude-code" })
+    ).rejects.toThrow(TEST_PATTERN_10);
   });
 
   it("--harness matching sniffed content resolves normally", async () => {
@@ -779,25 +800,29 @@ describe("resolveSessionRef — direct-file-path resolution", () => {
     writeFileSync(filePath, '{"foo":"bar"}\n');
 
     await expect(resolveSessionRef(filePath, {})).rejects.toThrow(
-      /not a recognized session file/,
+      TEST_PATTERN_11
     );
   });
 });
 
 describe("resolveSessionRef short-id prefix (real-data verification fix)", () => {
   it("resolves a unique 8-char prefix to the full session", async () => {
-    const { resolveSessionRef } = await import("../../src/commands/shared.js");
+    const { resolveSessionRef: resolveByPrefix } = await import(
+      "../../src/commands/shared.js"
+    );
     const roots = { "claude-code": ["test/fixtures/claude-code"] };
-    const short = await resolveSessionRef("cache-h", { roots });
+    const short = await resolveByPrefix("cache-h", { roots });
     expect(short.id).toBe("cache-heavy");
   });
   it("errors on an ambiguous prefix instead of guessing", async () => {
-    const { resolveSessionRef } = await import("../../src/commands/shared.js");
+    const { resolveSessionRef: resolveByPrefix } = await import(
+      "../../src/commands/shared.js"
+    );
     await expect(
-      resolveSessionRef("streaming-spl", {
+      resolveByPrefix("streaming-spl", {
         roots: { "claude-code": ["test/fixtures/claude-code"] },
-      }),
-    ).rejects.toThrow(/ambiguous session id prefix/);
+      })
+    ).rejects.toThrow(TEST_PATTERN_12);
   });
 });
 
@@ -811,8 +836,8 @@ describe("resolveSessionRef — unresolvable-target message names the checked ro
     };
     await expect(resolveSessionRef(undefined, { roots })).rejects.toThrow(
       new RegExp(
-        `no sessions found.*${emptyDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-      ),
+        `no sessions found.*${emptyDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      )
     );
   });
 });

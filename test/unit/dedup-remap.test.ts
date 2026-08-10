@@ -7,7 +7,7 @@
 
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import {
@@ -34,19 +34,21 @@ import type {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 
-async function refs(): Promise<SessionRef[]> {
+function refs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([FIXTURES_ROOT]);
 }
 
 function findRef(
   all: SessionRef[],
   versionDir: string,
-  id: string,
+  id: string
 ): SessionRef {
   const ref = all.find(
-    (r) => r.id === id && r.path.includes(`${sep}${versionDir}${sep}`),
+    (r) => r.id === id && r.path.includes(`${sep}${versionDir}${sep}`)
   );
-  if (!ref) throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  }
   return ref;
 }
 
@@ -54,13 +56,13 @@ function findRef(
 // dedup.test.ts/composition.test.ts's local helpers) ---
 
 function usage(
-  partial: Partial<NormalizedUsage> & { raw: unknown },
+  partial: Partial<NormalizedUsage> & { raw: unknown }
 ): NormalizedUsage {
   return {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
     ...partial,
   };
@@ -68,16 +70,16 @@ function usage(
 
 function zeroCategories(): Record<CompositionCategory, number> {
   return {
-    userText: 0,
     assistantText: 0,
-    thinking: 0,
-    toolResults: 0,
-    toolCallArgs: 0,
-    instructionInjection: 0,
-    systemPrompt: 0,
-    toolSchemas: 0,
     compactionSummaries: 0,
     coordination: 0,
+    instructionInjection: 0,
+    systemPrompt: 0,
+    thinking: 0,
+    toolCallArgs: 0,
+    toolResults: 0,
+    toolSchemas: 0,
+    userText: 0,
   };
 }
 
@@ -89,58 +91,58 @@ function makeTurn(opts: {
 }): Turn {
   const u = usage({ ...opts.usage, raw: opts.raw });
   return {
-    role: opts.role ?? "assistant",
-    model: "claude-sonnet-5",
-    timestamp: new Date(0),
-    contentSpans: opts.spans ?? [],
-    usage: u,
-    contextTotal:
-      u.inputUncached + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h,
     composition: {
       categories: zeroCategories(),
       residual: 0,
       residualShare: 0,
       truncated: false,
     },
+    contentSpans: opts.spans ?? [],
+    contextTotal:
+      u.inputUncached + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h,
     cost: {
-      input: 0,
-      output: 0,
       cacheRead: 0,
-      cacheWrite5m: 0,
       cacheWrite1h: 0,
-      total: 0,
+      cacheWrite5m: 0,
+      input: 0,
       mode: "auto",
+      output: 0,
       priced: false,
+      total: 0,
     },
+    model: "claude-sonnet-5",
+    role: opts.role ?? "assistant",
+    timestamp: new Date(0),
+    usage: u,
   };
 }
 
 function makeCompactionEvent(turnIndex: number): CompactionEvent {
   return {
-    kind: "compaction",
     at: new Date(0),
-    turnIndex,
-    tokensBeforeExact: null,
-    tokensAfterExact: null,
-    shrinkExact: null,
-    discardedEst: null,
-    summaryTokensEst: 0,
     cost: null,
+    discardedEst: null,
+    kind: "compaction",
+    shrinkExact: null,
+    summaryTokensEst: 0,
+    tokensAfterExact: null,
+    tokensBeforeExact: null,
+    turnIndex,
   };
 }
 
 function makeSession(turns: Turn[], events: SessionEvent[]): Session {
   return {
+    children: [],
+    configSnapshot: { model: "m", modelChanges: [] },
+    cwd: "/",
+    endedAt: new Date(0),
+    events,
     harness: "claude-code",
     harnessVersion: "test",
     id: "synthetic",
-    cwd: "/",
     startedAt: new Date(0),
-    endedAt: new Date(0),
-    configSnapshot: { model: "m", modelChanges: [] },
     turns,
-    events,
-    children: [],
     warnings: [],
   };
 }
@@ -186,11 +188,11 @@ describe("dedupTurnsWithMap — indexMap semantics", () => {
   it("sidechain-loser mapping: both the winner and the loser in a replay family map to the winner's final index", () => {
     const before = makeTurn({ raw: { tag: "before" } });
     const sidechainLoser = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r1", isSidechain: true },
+      raw: { isSidechain: true, message: { id: "m1" }, requestId: "r1" },
       usage: { inputUncached: 1, output: 1 },
     });
     const nonSidechainWinner = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r2", isSidechain: false },
+      raw: { isSidechain: false, message: { id: "m1" }, requestId: "r2" },
       usage: { inputUncached: 99, output: 99 },
     });
     const after = makeTurn({ raw: { tag: "after" } });
@@ -232,7 +234,7 @@ describe("dedupTurnsWithMap — indexMap semantics", () => {
     const solo = makeTurn({ raw: { tag: "solo" } });
 
     expect(dedupTurns([frag1, frag2, solo])).toEqual(
-      dedupTurnsWithMap([frag1, frag2, solo]).turns,
+      dedupTurnsWithMap([frag1, frag2, solo]).turns
     );
   });
 });
@@ -251,13 +253,15 @@ describe("dedupSession — CompactionEvent.turnIndex remap", () => {
     // position in the raw, pre-dedup turns[]).
     const session = makeSession(
       [frag1, frag2, postCompaction],
-      [makeCompactionEvent(2)],
+      [makeCompactionEvent(2)]
     );
     const deduped = dedupSession(session);
     expect(deduped.turns).toHaveLength(2);
 
-    const event = deduped.events[0];
-    if (event?.kind !== "compaction") throw new Error("unreachable");
+    const event = deduped.events.at(0);
+    if (event?.kind !== "compaction") {
+      throw new Error("unreachable");
+    }
     expect(event.turnIndex).toBe(1); // shifted down by 1 (2 fragments -> 1 turn)
   });
 
@@ -269,13 +273,15 @@ describe("dedupSession — CompactionEvent.turnIndex remap", () => {
     // Marker is the last thing in the file: turnIndex === pre-dedup turns.length (3).
     const session = makeSession(
       [frag1, frag2, frag3],
-      [makeCompactionEvent(3)],
+      [makeCompactionEvent(3)]
     );
     const deduped = dedupSession(session);
     expect(deduped.turns).toHaveLength(1);
 
-    const event = deduped.events[0];
-    if (event?.kind !== "compaction") throw new Error("unreachable");
+    const event = deduped.events.at(0);
+    if (event?.kind !== "compaction") {
+      throw new Error("unreachable");
+    }
     expect(event.turnIndex).toBe(1); // post-dedup turns.length, not the stale pre-dedup 3
   });
 
@@ -283,8 +289,8 @@ describe("dedupSession — CompactionEvent.turnIndex remap", () => {
     const frag1 = makeTurn({ raw: { message: { id: "m1" }, requestId: "r1" } });
     const frag2 = makeTurn({ raw: { message: { id: "m1" }, requestId: "r1" } });
     const errorEvent: SessionEvent = {
-      kind: "error",
       at: new Date(0),
+      kind: "error",
       message: "boom",
     };
 
@@ -299,7 +305,7 @@ describe("dedupSession — CompactionEvent.turnIndex remap", () => {
     const postCompaction = makeTurn({ raw: { tag: "post" } });
     const session = makeSession(
       [frag1, frag2, postCompaction],
-      [makeCompactionEvent(2)],
+      [makeCompactionEvent(2)]
     );
 
     const once = dedupSession(session);
@@ -321,7 +327,7 @@ describe("dedupSession — streaming-split-compaction fixture (real parse)", () 
 
     expect(session.turns).toHaveLength(4); // 3 streaming fragments + 1 post-compaction turn
     const rawEvent = session.events.find(
-      (e): e is CompactionEvent => e.kind === "compaction",
+      (e): e is CompactionEvent => e.kind === "compaction"
     );
     expect(rawEvent).toBeDefined();
     expect(rawEvent?.turnIndex).toBe(3); // adapter's pre-dedup convention
@@ -330,7 +336,7 @@ describe("dedupSession — streaming-split-compaction fixture (real parse)", () 
     expect(deduped.turns).toHaveLength(2); // 3 fragments merged into 1 + the post-compaction turn
 
     const remappedEvent = deduped.events.find(
-      (e): e is CompactionEvent => e.kind === "compaction",
+      (e): e is CompactionEvent => e.kind === "compaction"
     );
     expect(remappedEvent).toBeDefined();
     expect(remappedEvent?.turnIndex).toBe(1); // points at the post-compaction turn's real position
@@ -344,33 +350,33 @@ describe("dedupSession — streaming-split-compaction fixture (real parse)", () 
     const deduped = dedupSession(session);
     const composed = computeComposition(deduped);
     const [merged, post] = composed.turns;
-    expect(merged).toBeDefined();
-    expect(post).toBeDefined();
+    assert(merged);
+    assert(post);
 
     // Merged streaming-split turn (contextTotal 5000): userText 52 chars,
     // thinking excluded (claude-code), assistantText 31 chars, toolCallArgs
     // 28 chars (JSON.stringify({"command":"echo streaming"})).
     expect(merged?.contextTotal).toBe(5000);
-    expect(merged?.composition.categories.userText).toBe(13); // ceil(52/4)
-    expect(merged?.composition.categories.thinking).toBe(0);
-    expect(merged?.composition.categories.assistantText).toBe(8); // ceil(31/4)
-    expect(merged?.composition.categories.toolCallArgs).toBe(7); // ceil(28/4)
+    expect(merged.composition.categories.userText).toBe(13); // ceil(52/4)
+    expect(merged.composition.categories.thinking).toBe(0);
+    expect(merged.composition.categories.assistantText).toBe(8); // ceil(31/4)
+    expect(merged.composition.categories.toolCallArgs).toBe(7); // ceil(28/4)
 
     // Post-compaction turn (contextTotal 3000): reset boundary — userText and
     // toolCallArgs are back to 0, NOT inherited from the merged turn's phase.
     // compactionSummaries (144 chars) + this turn's own assistantText (49
     // chars) reseed the new phase.
     expect(post?.contextTotal).toBe(3000);
-    expect(post?.composition.categories.userText).toBe(0);
-    expect(post?.composition.categories.toolCallArgs).toBe(0);
-    expect(post?.composition.categories.compactionSummaries).toBe(36); // ceil(144/4)
-    expect(post?.composition.categories.assistantText).toBe(13); // ceil(49/4)
+    expect(post.composition.categories.userText).toBe(0);
+    expect(post.composition.categories.toolCallArgs).toBe(0);
+    expect(post.composition.categories.compactionSummaries).toBe(36); // ceil(144/4)
+    expect(post.composition.categories.assistantText).toBe(13); // ceil(49/4)
 
     // Σ categories + residual = contextTotal invariant on both turns.
     for (const turn of composed.turns) {
       const sum = Object.values(turn.composition.categories).reduce(
         (a, b) => a + b,
-        0,
+        0
       );
       expect(sum + turn.composition.residual).toBe(turn.contextTotal);
     }
@@ -384,7 +390,7 @@ describe("dedupSession — streaming-split-compaction fixture (real parse)", () 
     const deduped = dedupSession(session);
     const finalized = finalizeCompactions(deduped);
     const event = finalized.events.find(
-      (e): e is CompactionEvent => e.kind === "compaction",
+      (e): e is CompactionEvent => e.kind === "compaction"
     );
     expect(event).toBeDefined();
     expect(event?.tokensBeforeExact).toBe(5000); // merged streaming-split turn

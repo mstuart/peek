@@ -38,16 +38,16 @@ describe("formatCost", () => {
 function zeroComposition(): Composition {
   return {
     categories: {
-      userText: 0,
       assistantText: 0,
-      thinking: 0,
-      toolResults: 0,
-      toolCallArgs: 0,
-      instructionInjection: 0,
-      systemPrompt: 0,
-      toolSchemas: 0,
       compactionSummaries: 0,
       coordination: 0,
+      instructionInjection: 0,
+      systemPrompt: 0,
+      thinking: 0,
+      toolCallArgs: 0,
+      toolResults: 0,
+      toolSchemas: 0,
+      userText: 0,
     },
     residual: 0,
     residualShare: 0,
@@ -57,47 +57,47 @@ function zeroComposition(): Composition {
 
 function makeTurn(costTotal: number): Turn {
   const usage: NormalizedUsage = {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
     raw: undefined,
   };
   const cost: CostBreakdown = {
-    input: costTotal,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: costTotal,
+    cacheWrite5m: 0,
+    input: costTotal,
     mode: "auto",
+    output: 0,
     priced: true,
+    total: costTotal,
   };
   return {
-    role: "assistant",
-    model: "claude-opus-5",
-    timestamp: new Date(0),
-    contentSpans: [],
-    usage,
-    contextTotal: 0,
     composition: zeroComposition(),
+    contentSpans: [],
+    contextTotal: 0,
     cost,
+    model: "claude-opus-5",
+    role: "assistant",
+    timestamp: new Date(0),
+    usage,
   };
 }
 
 function makeSession(turns: Turn[]): Session {
   return {
+    children: [],
+    configSnapshot: { model: "claude-opus-5", modelChanges: [] },
+    cwd: "/tmp/project",
+    endedAt: new Date(0),
+    events: [],
     harness: "claude-code",
     harnessVersion: "test",
     id: "session-1",
-    cwd: "/tmp/project",
     startedAt: new Date(0),
-    endedAt: new Date(0),
-    configSnapshot: { model: "claude-opus-5", modelChanges: [] },
     turns,
-    events: [],
-    children: [],
     warnings: [],
   };
 }

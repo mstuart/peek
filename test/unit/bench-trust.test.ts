@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -28,6 +28,10 @@ import {
   ensureSuiteTrusted,
 } from "../../src/commands/bench.js";
 
+const TEST_PATTERN_1 = /^[0-9a-f]{64}$/;
+const TEST_PATTERN_2 = /trust/i;
+const TEST_PATTERN_3 = /--yes.{0,40}never/i;
+
 function tmpDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -37,8 +41,8 @@ function writeTask(dir: string, filename: string, task: BenchTask): void {
 }
 
 const CURRENT_PAIR: [ConfigVariant, ConfigVariant] = [
-  { name: "current", dir: "current" },
-  { name: "current-b", dir: "current" },
+  { dir: "current", name: "current" },
+  { dir: "current", name: "current-b" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -53,7 +57,7 @@ describe("computeSuiteHash", () => {
     const h1 = await computeSuiteHash(dir, CURRENT_PAIR);
     const h2 = await computeSuiteHash(dir, CURRENT_PAIR);
     expect(h1).toBe(h2);
-    expect(h1).toMatch(/^[0-9a-f]{64}$/); // sha256 hex
+    expect(h1).toMatch(TEST_PATTERN_1); // sha256 hex
   });
 
   it("changes when a task's verify command is edited", async () => {
@@ -72,16 +76,16 @@ describe("computeSuiteHash", () => {
     writeTask(dir, "a.json", {
       name: "a",
       prompt: "p",
-      verify: "true",
       setup: ["echo one"],
+      verify: "true",
     });
     const before = await computeSuiteHash(dir, CURRENT_PAIR);
 
     writeTask(dir, "a.json", {
       name: "a",
       prompt: "p",
-      verify: "true",
       setup: ["echo two"],
+      verify: "true",
     });
     const after = await computeSuiteHash(dir, CURRENT_PAIR);
 
@@ -105,8 +109,8 @@ describe("computeSuiteHash", () => {
     const variantDir = tmpDir("peek-trust-variant-");
     writeFileSync(join(variantDir, "CLAUDE.md"), "rule v1");
     const configs: [ConfigVariant, ConfigVariant] = [
-      { name: "current", dir: "current" },
-      { name: "variant", dir: variantDir },
+      { dir: "current", name: "current" },
+      { dir: variantDir, name: "variant" },
     ];
 
     const before = await computeSuiteHash(suiteDir, configs);
@@ -123,8 +127,8 @@ describe("computeSuiteHash", () => {
     // "current" is a sentinel, not a real path — never read from disk.
     const h1 = await computeSuiteHash(suiteDir, CURRENT_PAIR);
     const h2 = await computeSuiteHash(suiteDir, [
-      { name: "current", dir: "current" },
-      { name: "current-b", dir: "current" },
+      { dir: "current", name: "current" },
+      { dir: "current", name: "current-b" },
     ]);
     expect(h1).toBe(h2);
   });
@@ -160,7 +164,9 @@ describe("trust store", () => {
 
   it("writes the store dir as 0700 and the store file as 0600", async () => {
     await trustSuite("a".repeat(64), "/some/suite", storePath);
+    // biome-ignore lint/suspicious/noBitwiseOperators: POSIX permission checks require a mode-bit mask.
     expect(statSync(dirname(storePath)).mode & 0o777).toBe(0o700);
+    // biome-ignore lint/suspicious/noBitwiseOperators: POSIX permission checks require a mode-bit mask.
     expect(statSync(storePath).mode & 0o777).toBe(0o600);
   });
 
@@ -173,7 +179,9 @@ describe("trust store", () => {
 
     await loadTrustStore(storePath);
 
+    // biome-ignore lint/suspicious/noBitwiseOperators: POSIX permission checks require a mode-bit mask.
     expect(statSync(dirname(storePath)).mode & 0o777).toBe(0o700);
+    // biome-ignore lint/suspicious/noBitwiseOperators: POSIX permission checks require a mode-bit mask.
     expect(statSync(storePath).mode & 0o777).toBe(0o600);
   });
 
@@ -194,7 +202,7 @@ describe("trust store", () => {
           suitePath: "/old/path",
         },
       }),
-      "utf8",
+      "utf8"
     );
 
     await trustSuite(hash, "/new/path", storePath);
@@ -239,13 +247,13 @@ describe("formatTrustPrompt", () => {
     writeFileSync(join(variantDir, "CLAUDE.md"), "rule");
     writeFileSync(join(variantDir, "model"), "claude-haiku\n");
     const configs: [ConfigVariant, ConfigVariant] = [
-      { name: "current", dir: "current" },
-      { name: "variant", dir: variantDir },
+      { dir: "current", name: "current" },
+      { dir: variantDir, name: "variant" },
     ];
     const text = await formatTrustPrompt(
       "/some/suite",
       [{ name: "t", prompt: "p", verify: "true" }],
-      configs,
+      configs
     );
 
     expect(text).toContain(`config-b (variant): ${variantDir}`);
@@ -278,12 +286,12 @@ describe("ensureSuiteTrusted flag/TTY matrix", () => {
   });
 
   function opts(
-    extra: Partial<BenchRunCommandOptions> = {},
+    extra: Partial<BenchRunCommandOptions> = {}
   ): BenchRunCommandOptions {
     return {
-      suite: suiteDir,
       configA: "current",
       configB: "current",
+      suite: suiteDir,
       trustStorePathOverride: storePath,
       ...extra,
     };
@@ -299,8 +307,8 @@ describe("ensureSuiteTrusted flag/TTY matrix", () => {
     const result = await ensureSuiteTrusted(
       opts({ yes: true }),
       [{ name: "a", prompt: "p", verify: "true" }],
-      { name: "current", dir: "current" },
-      { name: "current-b", dir: "current" },
+      { dir: "current", name: "current" },
+      { dir: "current", name: "current-b" }
     );
 
     expect(result).toBe(true);
@@ -311,10 +319,10 @@ describe("ensureSuiteTrusted flag/TTY matrix", () => {
     process.stdin.isTTY = false;
 
     const result = await ensureSuiteTrusted(
-      opts({ yes: true, trustSuite: false }),
+      opts({ trustSuite: false, yes: true }),
       [{ name: "a", prompt: "p", verify: "true" }],
-      { name: "current", dir: "current" },
-      { name: "current-b", dir: "current" },
+      { dir: "current", name: "current" },
+      { dir: "current", name: "current-b" }
     );
 
     expect(result).toBe(false);
@@ -329,8 +337,8 @@ describe("ensureSuiteTrusted flag/TTY matrix", () => {
     const result = await ensureSuiteTrusted(
       opts({ trustSuite: true }),
       [{ name: "a", prompt: "p", verify: "true" }],
-      { name: "current", dir: "current" },
-      { name: "current-b", dir: "current" },
+      { dir: "current", name: "current" },
+      { dir: "current", name: "current-b" }
     );
 
     expect(result).toBe(true);
@@ -347,10 +355,10 @@ describe("ensureSuiteTrusted flag/TTY matrix", () => {
 
     process.stdin.isTTY = false;
     const result = await ensureSuiteTrusted(
-      opts({ yes: true, trustSuite: false }),
+      opts({ trustSuite: false, yes: true }),
       [{ name: "a", prompt: "p", verify: "false" }],
-      { name: "current", dir: "current" },
-      { name: "current-b", dir: "current" },
+      { dir: "current", name: "current" },
+      { dir: "current", name: "current-b" }
     );
 
     // Non-TTY + no --trust-suite -> hard abort, same as any other untrusted suite.
@@ -373,8 +381,8 @@ describe("README Bench safety paragraph", () => {
     const paragraphEnd = readme.indexOf("\n\n", safetyParagraphStart);
     const paragraph = readme.slice(safetyParagraphStart, paragraphEnd);
 
-    expect(paragraph).toMatch(/trust/i);
+    expect(paragraph).toMatch(TEST_PATTERN_2);
     expect(paragraph).toContain("--trust-suite");
-    expect(paragraph).toMatch(/--yes.{0,40}never/i);
+    expect(paragraph).toMatch(TEST_PATTERN_3);
   });
 });

@@ -47,7 +47,6 @@ import {
 } from "../adapters/pi/discover.js";
 import { parsePiSession } from "../adapters/pi/parse.js";
 import { dedupSession } from "../engine/dedup.js";
-import { formatCost } from "../model/format.js";
 import type {
   HarnessId,
   ParseResult,
@@ -56,7 +55,8 @@ import type {
   SessionRef,
 } from "../model/types.js";
 
-export { formatCost };
+// biome-ignore lint/performance/noBarrelFile: Preserve this established command-helper export path.
+export { formatCost } from "../model/format.js";
 
 // ---------------------------------------------------------------------------
 // CLI option parsing helpers — small enough that duplicating cli.ts's own
@@ -71,7 +71,7 @@ export function parseHarnessOption(value: string): HarnessId {
     return value as HarnessId;
   }
   throw new Error(
-    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`,
+    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`
   );
 }
 
@@ -98,8 +98,8 @@ export function formatTimestamp(date: Date): string {
 // ---------------------------------------------------------------------------
 
 export interface ResolveOptions {
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
   /** Discovery root overrides, keyed like adapters/*'s own `roots?: string[]`
    * param. Test-only escape hatch — production callers omit this and get
    * each adapter's real default root. */
@@ -113,12 +113,14 @@ export interface DiscoverAllOptions extends ResolveOptions {
 
 function applyFilters(
   refs: readonly SessionRef[],
-  opts: DiscoverAllOptions,
+  opts: DiscoverAllOptions
 ): SessionRef[] {
   let result: SessionRef[] = [...refs];
-  if (opts.harness) result = result.filter((r) => r.harness === opts.harness);
+  if (opts.harness) {
+    result = result.filter((r) => r.harness === opts.harness);
+  }
   if (opts.cwd) {
-    const cwd = opts.cwd;
+    const { cwd } = opts;
     // Only excludes refs that CARRY a cwd at discovery time and it doesn't
     // match (codex refs never carry cwd until parse time — see
     // adapters/codex/discover.ts) — same documented limitation as
@@ -126,7 +128,7 @@ function applyFilters(
     result = result.filter((r) => r.cwd === undefined || r.cwd === cwd);
   }
   if (opts.since) {
-    const since = opts.since;
+    const { since } = opts;
     result = result.filter((r) => r.mtime >= since);
   }
   return result;
@@ -136,7 +138,7 @@ function applyFilters(
  * --harness/--cwd/--since filters. Never throws — missing discovery roots
  * resolve to an empty list per each adapter's own discover(). */
 export async function discoverAll(
-  opts: DiscoverAllOptions = {},
+  opts: DiscoverAllOptions = {}
 ): Promise<SessionRef[]> {
   const [claude, codex, pi] = await Promise.all([
     discoverClaudeSessions(opts.roots?.["claude-code"]),
@@ -204,21 +206,30 @@ export function describeCheckedRoots(opts: ResolveOptions = {}): string {
 function mostRecent(refs: readonly SessionRef[]): SessionRef {
   const sorted = [...refs].sort((a, b) => {
     const byMtime = b.mtime.getTime() - a.mtime.getTime();
-    if (byMtime !== 0) return byMtime;
-    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0; // deterministic tiebreak
+    if (byMtime !== 0) {
+      return byMtime;
+    }
+    if (a.path < b.path) {
+      return -1;
+    }
+    return a.path > b.path ? 1 : 0; // deterministic tiebreak
   });
-  const first = sorted[0];
-  if (!first) throw new Error("mostRecent: refs must be non-empty");
+  const [first] = sorted;
+  if (!first) {
+    throw new Error("mostRecent: refs must be non-empty");
+  }
   return first;
 }
 
 function ancestorDirs(dir: string, levels: number): string[] {
   const dirs: string[] = [];
   let current = dir;
-  for (let i = 0; i < levels; i++) {
+  for (let i = 0; i < levels; i += 1) {
     dirs.push(current);
     const parent = path.dirname(current);
-    if (parent === current) break;
+    if (parent === current) {
+      break;
+    }
     current = parent;
   }
   return dirs;
@@ -260,23 +271,30 @@ async function sniffHarness(filePath: string): Promise<HarnessId | undefined> {
     const nl = raw.indexOf("\n");
     firstLine = nl === -1 ? raw : raw.slice(0, nl);
   } catch {
-    return undefined;
+    return;
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(firstLine);
   } catch {
-    return undefined;
+    return;
   }
-  if (typeof parsed !== "object" || parsed === null) return undefined;
+  if (typeof parsed !== "object" || parsed === null) {
+    return;
+  }
   const record = parsed as Record<string, unknown>;
 
   const keys = Object.keys(record).sort().join(",");
-  if (keys === "payload,timestamp,type") return "codex";
-  if (record.type === "session" || "kind" in record) return "pi";
-  if (typeof record.sessionId === "string") return "claude-code";
-  return undefined;
+  if (keys === "payload,timestamp,type") {
+    return "codex";
+  }
+  if (record.type === "session" || "kind" in record) {
+    return "pi";
+  }
+  if (typeof record.sessionId === "string") {
+    return "claude-code";
+  }
 }
 
 const DISCOVER_BY_HARNESS: Record<
@@ -303,30 +321,35 @@ const DISCOVER_BY_HARNESS: Record<
  */
 async function resolveByPath(
   input: string,
-  harnessOverride?: HarnessId,
+  harnessOverride?: HarnessId
 ): Promise<SessionRef | undefined> {
   const asPath = path.resolve(input);
-  if (!existsSync(asPath)) return undefined;
+  if (!existsSync(asPath)) {
+    return;
+  }
 
   const harness = await sniffHarness(asPath);
   if (!harness) {
     throw new Error(
-      `file exists but is not a recognized session file: ${input} (tried codex [line 1 is exactly {timestamp,type,payload}], pi [line 1 has type:"session" or a "kind" field], claude-code [line 1 has a sessionId field]; none matched)`,
+      `file exists but is not a recognized session file: ${input} (tried codex [line 1 is exactly {timestamp,type,payload}], pi [line 1 has type:"session" or a "kind" field], claude-code [line 1 has a sessionId field]; none matched)`
     );
   }
   if (harnessOverride !== undefined && harness !== harnessOverride) {
     throw new Error(
-      `--harness ${harnessOverride} was given but ${input} is a ${harness} session by content — drop --harness or correct it`,
+      `--harness ${harnessOverride} was given but ${input} is a ${harness} session by content — drop --harness or correct it`
     );
   }
 
   const discover = DISCOVER_BY_HARNESS[harness];
   const roots = ancestorDirs(path.dirname(asPath), 4);
   for (const root of roots) {
+    // biome-ignore lint/performance/noAwaitInLoops: Search nearest ancestors first and stop at the first match.
     const found = (await discover([root])).find(
-      (r) => path.resolve(r.path) === asPath,
+      (r) => path.resolve(r.path) === asPath
     );
-    if (found) return found;
+    if (found) {
+      return found;
+    }
   }
 
   throw new Error(`file exists but is not a recognized session file: ${input}`);
@@ -343,11 +366,13 @@ async function resolveByPath(
  */
 export async function resolveSessionRef(
   input: string | undefined,
-  opts: ResolveOptions = {},
+  opts: ResolveOptions = {}
 ): Promise<SessionRef> {
   if (input !== undefined) {
     const byPath = await resolveByPath(input, opts.harness);
-    if (byPath) return byPath;
+    if (byPath) {
+      return byPath;
+    }
   }
 
   const refs = await discoverAll(opts);
@@ -355,7 +380,7 @@ export async function resolveSessionRef(
   if (input === undefined) {
     if (refs.length === 0) {
       throw new Error(
-        `no sessions found — checked ${describeCheckedRoots(opts)} (narrowed by --cwd/--harness if passed)`,
+        `no sessions found — checked ${describeCheckedRoots(opts)} (narrowed by --cwd/--harness if passed)`
       );
     }
     return mostRecent(refs);
@@ -373,7 +398,7 @@ export async function resolveSessionRef(
       matches = prefixMatches;
     } else if (uniqueIds.size > 1) {
       throw new Error(
-        `ambiguous session id prefix "${input}" (${uniqueIds.size} matches) — use more characters`,
+        `ambiguous session id prefix "${input}" (${uniqueIds.size} matches) — use more characters`
       );
     }
   }
@@ -383,11 +408,13 @@ export async function resolveSessionRef(
   if (matches.length > 1) {
     const harnesses = [...new Set(matches.map((m) => m.harness))].join(", ");
     throw new Error(
-      `session id "${input}" is ambiguous across harnesses (${harnesses}) — pass --harness to disambiguate`,
+      `session id "${input}" is ambiguous across harnesses (${harnesses}) — pass --harness to disambiguate`
     );
   }
-  const match = matches[0];
-  if (!match) throw new Error("unreachable");
+  const [match] = matches;
+  if (!match) {
+    throw new Error("unreachable");
+  }
   return match;
 }
 
@@ -402,9 +429,9 @@ export interface ParseOptions {
   spans?: boolean;
 }
 
-async function parseSessionByHarness(
+function parseSessionByHarness(
   ref: SessionRef,
-  opts: ParseOptions = {},
+  opts: ParseOptions = {}
 ): Promise<ParseResult> {
   switch (ref.harness) {
     case "claude-code":
@@ -436,7 +463,7 @@ export interface LoadedSession {
  * parse — see ParseOptions doc. */
 export async function parseAndDedup(
   ref: SessionRef,
-  opts: ParseOptions = {},
+  opts: ParseOptions = {}
 ): Promise<LoadedSession> {
   const { session, warnings } = await parseSessionByHarness(ref, opts);
   return { ref, session: dedupSession(session), warnings };
@@ -445,7 +472,7 @@ export async function parseAndDedup(
 /** resolveSessionRef -> parseAndDedup, for commands taking a `[sess]` arg. */
 export async function loadSession(
   idOrPath: string | undefined,
-  opts: ResolveOptions = {},
+  opts: ResolveOptions = {}
 ): Promise<LoadedSession> {
   const ref = await resolveSessionRef(idOrPath, opts);
   return parseAndDedup(ref);

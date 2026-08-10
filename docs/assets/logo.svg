@@ -1,15 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="200" viewBox="0 0 800 200" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-  <rect width="800" height="200" rx="16" fill="#0d1117"/>
-  <rect x="0.5" y="0.5" width="799" height="199" rx="16" fill="none" stroke="#30363d"/>
+<svg
+  font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
+  height="200"
+  viewBox="0 0 800 200"
+  width="800"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title>peek</title>
+  <rect fill="#0d1117" height="200" rx="16" width="800" />
+  <rect
+    fill="none"
+    height="199"
+    rx="16"
+    stroke="#30363d"
+    width="799"
+    x="0.5"
+    y="0.5"
+  />
   <!-- centered lockup: badge (magnifier over a small bar-chart) + wordmark, tagline centered beneath -->
   <g transform="translate(257,38)">
-    <rect width="96" height="96" rx="24" fill="#0ea5e9"/>
-    <circle cx="42" cy="42" r="24" fill="none" stroke="#ffffff" stroke-width="7"/>
-    <line x1="59" y1="59" x2="78" y2="78" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
-    <rect x="30" y="42" width="7" height="10" rx="1.5" fill="#ffffff"/>
-    <rect x="40" y="36" width="7" height="16" rx="1.5" fill="#ffffff"/>
-    <rect x="50" y="30" width="7" height="22" rx="1.5" fill="#ffffff"/>
+    <rect fill="#0ea5e9" height="96" rx="24" width="96" />
+    <circle
+      cx="42"
+      cy="42"
+      fill="none"
+      r="24"
+      stroke="#ffffff"
+      stroke-width="7"
+    />
+    <line
+      stroke="#ffffff"
+      stroke-linecap="round"
+      stroke-width="8"
+      x1="59"
+      x2="78"
+      y1="59"
+      y2="78"
+    />
+    <rect fill="#ffffff" height="10" rx="1.5" width="7" x="30" y="42" />
+    <rect fill="#ffffff" height="16" rx="1.5" width="7" x="40" y="36" />
+    <rect fill="#ffffff" height="22" rx="1.5" width="7" x="50" y="30" />
   </g>
-  <text x="383" y="120" fill="#e6edf3" font-size="92" font-weight="800" letter-spacing="-3">peek</text>
-  <text x="400" y="154" text-anchor="middle" fill="#8b949e" font-size="15" font-weight="500">composition, cost, and compaction for coding agent sessions</text>
+  <text
+    fill="#e6edf3"
+    font-size="92"
+    font-weight="800"
+    letter-spacing="-3"
+    x="383"
+    y="120"
+  >
+    peek
+  </text>
+  <text
+    fill="#8b949e"
+    font-size="15"
+    font-weight="500"
+    text-anchor="middle"
+    x="400"
+    y="154"
+  >
+    composition, cost, and compaction for coding agent sessions
+  </text>
 </svg>

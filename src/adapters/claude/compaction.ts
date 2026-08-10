@@ -14,9 +14,9 @@ import type { RawClaudeRecord } from "./records.js";
 
 /** The subset of a built Turn's identity anchoring needs, keyed by source line. */
 export interface AnchorableTurn {
-  line: number;
   contextTotal: number;
   isApiError: boolean;
+  line: number;
 }
 
 function isRealUsageTurn(turn: AnchorableTurn): boolean {
@@ -30,9 +30,9 @@ function isRealUsageTurn(turn: AnchorableTurn): boolean {
  */
 export function findTokensBefore(
   turns: readonly AnchorableTurn[],
-  markerLine: number,
+  markerLine: number
 ): number | null {
-  for (let i = turns.length - 1; i >= 0; i--) {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i] as AnchorableTurn;
     if (turn.line < markerLine && isRealUsageTurn(turn)) {
       return turn.contextTotal;
@@ -44,7 +44,7 @@ export function findTokensBefore(
 /** First real-usage turn strictly after the marker line (includes the fresh summary). */
 export function findTokensAfter(
   turns: readonly AnchorableTurn[],
-  markerLine: number,
+  markerLine: number
 ): number | null {
   for (const turn of turns) {
     if (turn.line > markerLine && isRealUsageTurn(turn)) {
@@ -64,7 +64,7 @@ export function findTokensAfter(
  */
 export function findNextTurnIndex(
   turns: readonly AnchorableTurn[],
-  markerLine: number,
+  markerLine: number
 ): number {
   const idx = turns.findIndex((turn) => turn.line > markerLine);
   return idx === -1 ? turns.length : idx;
@@ -79,14 +79,14 @@ export function findNextTurnIndex(
 export function computeCompactionDeltas(
   tokensBeforeExact: number | null,
   tokensAfterExact: number | null,
-  summaryTokensEst: number,
+  summaryTokensEst: number
 ): { shrinkExact: number | null; discardedEst: number | null } {
   if (tokensBeforeExact === null || tokensAfterExact === null) {
-    return { shrinkExact: null, discardedEst: null };
+    return { discardedEst: null, shrinkExact: null };
   }
   return {
-    shrinkExact: tokensBeforeExact - tokensAfterExact,
     discardedEst: tokensBeforeExact - tokensAfterExact + summaryTokensEst,
+    shrinkExact: tokensBeforeExact - tokensAfterExact,
   };
 }
 
@@ -102,7 +102,7 @@ export function buildCompactionEvent(
   markerRecord: RawClaudeRecord,
   at: Date,
   summaryContent: string,
-  turns: readonly AnchorableTurn[],
+  turns: readonly AnchorableTurn[]
 ): CompactionEvent {
   const tokensBeforeExact = findTokensBefore(turns, markerRecord.line);
   const tokensAfterExact = findTokensAfter(turns, markerRecord.line);
@@ -110,18 +110,18 @@ export function buildCompactionEvent(
   const { shrinkExact, discardedEst } = computeCompactionDeltas(
     tokensBeforeExact,
     tokensAfterExact,
-    summaryTokensEst,
+    summaryTokensEst
   );
 
   return {
-    kind: "compaction",
     at,
-    turnIndex: findNextTurnIndex(turns, markerRecord.line),
-    tokensBeforeExact,
-    tokensAfterExact,
-    shrinkExact,
-    discardedEst,
-    summaryTokensEst,
     cost: null,
+    discardedEst,
+    kind: "compaction",
+    shrinkExact,
+    summaryTokensEst,
+    tokensAfterExact,
+    tokensBeforeExact,
+    turnIndex: findNextTurnIndex(turns, markerRecord.line),
   };
 }

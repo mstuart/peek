@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: Preserve the existing public module path.
 // `peek report --all` — cross-session trends dashboard. Same zero-JS,
 // inline-CSS, no-external-URL contract as render/html.ts (this file's
 // sibling for the single-session report): a self-contained HTML document
@@ -35,14 +36,14 @@ import { formatCompact, formatNumber } from "./table.js";
 // ---------------------------------------------------------------------------
 
 export interface DashboardFilters {
-  sinceISO?: string;
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
+  sinceISO?: string;
 }
 
 export interface DashboardHeadline {
+  activeDays: number;
   totalCostLabel: string; // exact dollar figure summed over priced sessions
-  unpricedSessionCount: number; // honesty note — these contribute $0 above
   totalSessions: number;
   totalTokens: {
     inputUncached: number;
@@ -50,15 +51,15 @@ export interface DashboardHeadline {
     cacheWrite: number;
     output: number;
   };
-  activeDays: number;
+  unpricedSessionCount: number; // honesty note — these contribute $0 above
 }
 
 /** One stacked-bar series for the daily-cost chart: a specific model, or the
  * aggregated "other" tail bucket (see buildDashboardData for the top-5+other
  * split). */
 export interface DashboardModelSeries {
-  model: string;
   costsByDay: number[]; // aligned to DashboardData.days, exact dollars
+  model: string;
 }
 
 export type DashboardTokenClass =
@@ -73,39 +74,39 @@ export interface DashboardTokenSeries {
 }
 
 export interface DashboardPerProjectRow {
+  costLabel: string; // exact
   cwdLabel: string;
+  lastActivityISO: string;
   sessions: number;
   tokens: number; // exact
-  costLabel: string; // exact
-  lastActivityISO: string;
 }
 
 export interface DashboardPerHarnessRow {
+  costLabel: string; // exact
   harness: HarnessId;
   sessions: number;
   tokens: number; // exact
-  costLabel: string; // exact
   unpricedSessionCount: number;
 }
 
 export interface DashboardData {
-  generatedAtISO: string;
-  peekVersion: string;
-  filters: DashboardFilters;
-  headline: DashboardHeadline;
+  /** cacheRead / (cacheRead + inputUncached + cacheWrite) per day, aligned
+   * to `days`. null on a day with no denominator (no tokens logged). */
+  cacheHitRate: (number | null)[];
+  compactionCounts: number[]; // aligned to `days`
+  dailyCost: DashboardModelSeries[];
+  dailyTokens: DashboardTokenSeries[];
   /** UTC day buckets, "YYYY-MM-DD", ascending — shared x-axis for
    * dailyCost/dailyTokens/cacheHitRate/compactionCounts below. Capped to the
    * trailing 30 days unless filters.sinceISO widens it (buildDashboardData's
    * job); headline/perProject/perHarness are NOT limited to this window. */
   days: string[];
-  dailyCost: DashboardModelSeries[];
-  dailyTokens: DashboardTokenSeries[];
-  /** cacheRead / (cacheRead + inputUncached + cacheWrite) per day, aligned
-   * to `days`. null on a day with no denominator (no tokens logged). */
-  cacheHitRate: (number | null)[];
-  compactionCounts: number[]; // aligned to `days`
-  perProject: DashboardPerProjectRow[]; // top 15 by cost, pre-sorted
+  filters: DashboardFilters;
+  generatedAtISO: string;
+  headline: DashboardHeadline;
+  peekVersion: string;
   perHarness: DashboardPerHarnessRow[]; // pre-sorted by cost desc
+  perProject: DashboardPerProjectRow[]; // top 15 by cost, pre-sorted
 }
 
 // ---------------------------------------------------------------------------
@@ -113,11 +114,11 @@ export interface DashboardData {
 // ---------------------------------------------------------------------------
 
 const HTML_ESCAPES: Record<string, string> = {
+  "'": "&#39;",
+  '"': "&quot;",
   "&": "&amp;",
   "<": "&lt;",
   ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
 };
 
 function esc(value: string): string {
@@ -132,14 +133,14 @@ function esc(value: string): string {
 // ---------------------------------------------------------------------------
 
 const SERIES_HUES: ReadonlyArray<{ light: string; dark: string }> = [
-  { light: "#2a78d6", dark: "#3987e5" }, // blue
-  { light: "#eb6834", dark: "#d95926" }, // orange
-  { light: "#1baf7a", dark: "#199e70" }, // green
-  { light: "#eda100", dark: "#c98500" }, // amber
-  { light: "#e87ba4", dark: "#d55181" }, // pink
-  { light: "#4a3aa7", dark: "#9085e9" }, // purple
-  { light: "#e34948", dark: "#e66767" }, // red
-  { light: "#008300", dark: "#008300" }, // dark green
+  { dark: "#3987e5", light: "#2a78d6" }, // blue
+  { dark: "#d95926", light: "#eb6834" }, // orange
+  { dark: "#199e70", light: "#1baf7a" }, // green
+  { dark: "#c98500", light: "#eda100" }, // amber
+  { dark: "#d55181", light: "#e87ba4" }, // pink
+  { dark: "#9085e9", light: "#4a3aa7" }, // purple
+  { dark: "#e66767", light: "#e34948" }, // red
+  { dark: "#008300", light: "#008300" }, // dark green
 ];
 
 function seriesColorVar(index: number): string {
@@ -147,18 +148,18 @@ function seriesColorVar(index: number): string {
 }
 
 const TOKEN_CLASS_LABELS: Record<DashboardTokenClass, string> = {
-  inputUncached: "input (uncached)",
   cacheRead: "cache read",
   cacheWrite: "cache write",
+  inputUncached: "input (uncached)",
   output: "output",
 };
 
 // inputUncached/cacheRead/cacheWrite/output map onto fixed hues so the same
 // class always reads the same color across the dashboard.
 const TOKEN_CLASS_COLOR_INDEX: Record<DashboardTokenClass, number> = {
-  inputUncached: 0, // blue
   cacheRead: 2, // green — the cache-dominance story gets the "efficient" hue
   cacheWrite: 3, // amber
+  inputUncached: 0, // blue
   output: 1, // orange
 };
 
@@ -170,10 +171,10 @@ const TOKEN_CLASS_COLOR_INDEX: Record<DashboardTokenClass, number> = {
 
 function buildCss(): string {
   const seriesVarsLight = SERIES_HUES.map(
-    (h, i) => `--series-${i}: ${h.light};`,
+    (h, i) => `--series-${i}: ${h.light};`
   ).join("\n      ");
   const seriesVarsDark = SERIES_HUES.map(
-    (h, i) => `--series-${i}: ${h.dark};`,
+    (h, i) => `--series-${i}: ${h.dark};`
   ).join("\n      ");
 
   return `
@@ -285,7 +286,7 @@ function buildCss(): string {
 // point gets a <title> tooltip.
 // ---------------------------------------------------------------------------
 
-const CHART_PAD = { left: 60, right: 12, top: 14, bottom: 26 };
+const CHART_PAD = { bottom: 26, left: 60, right: 12, top: 14 };
 
 function niceMax(value: number): number {
   return value > 0 ? value * 1.08 : 1;
@@ -295,18 +296,24 @@ function niceMax(value: number): number {
  * day axes (up to 30+ buckets) would overlap illegibly if every day were
  * labeled. */
 function xTickIndices(count: number, maxTicks = 8): number[] {
-  if (count <= maxTicks) return Array.from({ length: count }, (_, i) => i);
+  if (count <= maxTicks) {
+    return Array.from({ length: count }, (_, i) => i);
+  }
   const step = Math.ceil(count / maxTicks);
   const idxs: number[] = [];
-  for (let i = 0; i < count; i += step) idxs.push(i);
+  for (let i = 0; i < count; i += step) {
+    idxs.push(i);
+  }
   const last = count - 1;
-  if (idxs[idxs.length - 1] !== last) idxs.push(last);
+  if (idxs.at(-1) !== last) {
+    idxs.push(last);
+  }
   return idxs;
 }
 
 interface StackedSeriesInput {
-  label: string;
   colorVar: string;
+  label: string;
   values: number[];
 }
 
@@ -323,7 +330,7 @@ function buildStackedBarSvg(params: {
   const { left, right, top, bottom } = CHART_PAD;
   const chartW = width - left - right;
   const chartH = height - top - bottom;
-  const days = params.days;
+  const { days } = params;
   const n = days.length;
 
   if (n === 0) {
@@ -331,7 +338,7 @@ function buildStackedBarSvg(params: {
   }
 
   const totals = days.map((_, i) =>
-    params.series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0),
+    params.series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0)
   );
   const yMax = niceMax(Math.max(0, ...totals));
 
@@ -341,14 +348,14 @@ function buildStackedBarSvg(params: {
 
   const gridLines: string[] = [];
   const yLabels: string[] = [];
-  for (let g = 0; g <= 4; g++) {
+  for (let g = 0; g <= 4; g += 1) {
     const frac = g / 4;
     const y = top + chartH * (1 - frac);
     gridLines.push(
-      `<line x1="${left}" y1="${y.toFixed(1)}" x2="${(left + chartW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gridline)" stroke-width="1"/>`,
+      `<line x1="${left}" y1="${y.toFixed(1)}" x2="${(left + chartW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gridline)" stroke-width="1"/>`
     );
     yLabels.push(
-      `<text x="${(left - 6).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="axis-label">${esc(params.formatValue(yMax * frac))}</text>`,
+      `<text x="${(left - 6).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="axis-label">${esc(params.formatValue(yMax * frac))}</text>`
     );
   }
 
@@ -358,17 +365,19 @@ function buildStackedBarSvg(params: {
   });
 
   const bars: string[] = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     let cumulative = 0;
     const x = left + i * slotW + barGap / 2;
     for (const s of params.series) {
       const v = s.values[i] ?? 0;
-      if (v <= 0) continue;
+      if (v <= 0) {
+        continue;
+      }
       const segH = (v / yMax) * chartH;
       const y = top + chartH - cumulative - segH;
       const title = `${esc(days[i] ?? "")} · ${esc(s.label)}: ${esc(params.formatValue(v))} (exact)`;
       bars.push(
-        `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${segH.toFixed(1)}" fill="${s.colorVar}"><title>${title}</title></rect>`,
+        `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${segH.toFixed(1)}" fill="${s.colorVar}"><title>${title}</title></rect>`
       );
       cumulative += segH;
     }
@@ -406,14 +415,14 @@ function buildLineChartSvg(params: {
 
   const gridLines: string[] = [];
   const yLabels: string[] = [];
-  for (let g = 0; g <= 4; g++) {
+  for (let g = 0; g <= 4; g += 1) {
     const frac = g / 4;
     const y = top + chartH * (1 - frac);
     gridLines.push(
-      `<line x1="${left}" y1="${y.toFixed(1)}" x2="${(left + chartW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gridline)" stroke-width="1"/>`,
+      `<line x1="${left}" y1="${y.toFixed(1)}" x2="${(left + chartW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--gridline)" stroke-width="1"/>`
     );
     yLabels.push(
-      `<text x="${(left - 6).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="axis-label">${Math.round(frac * 100)}%</text>`,
+      `<text x="${(left - 6).toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="axis-label">${Math.round(frac * 100)}%</text>`
     );
   }
 
@@ -423,25 +432,29 @@ function buildLineChartSvg(params: {
   });
 
   const points = params.values.map((v, i) => {
-    if (v === null) return null;
+    if (v === null) {
+      return null;
+    }
     const x = left + i * slotW;
     const y = top + chartH * (1 - Math.max(0, Math.min(1, v)));
-    return { x, y, v };
+    return { v, x, y };
   });
 
   const segments: string[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
+  for (let i = 0; i < points.length - 1; i += 1) {
     const a = points[i];
     const b = points[i + 1];
     if (a && b) {
       segments.push(
-        `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${seriesColorVar(2)}" stroke-width="2"/>`,
+        `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${seriesColorVar(2)}" stroke-width="2"/>`
       );
     }
   }
   const dots = points
     .map((p, i) => {
-      if (!p) return "";
+      if (!p) {
+        return "";
+      }
       const title = `${esc(params.days[i] ?? "")}: ${(p.v * 100).toFixed(1)}% (exact)`;
       return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${seriesColorVar(2)}"><title>${title}</title></circle>`;
     })
@@ -465,9 +478,15 @@ function buildLineChartSvg(params: {
 function buildHeader(data: DashboardData): string {
   const f = data.filters;
   const filterParts: string[] = [];
-  if (f.sinceISO) filterParts.push(`since ${esc(f.sinceISO.slice(0, 10))}`);
-  if (f.harness) filterParts.push(`harness ${esc(f.harness)}`);
-  if (f.cwd) filterParts.push(`cwd ${esc(f.cwd)}`);
+  if (f.sinceISO) {
+    filterParts.push(`since ${esc(f.sinceISO.slice(0, 10))}`);
+  }
+  if (f.harness) {
+    filterParts.push(`harness ${esc(f.harness)}`);
+  }
+  if (f.cwd) {
+    filterParts.push(`cwd ${esc(f.cwd)}`);
+  }
   const filterLine =
     filterParts.length > 0
       ? `<div><dt>Filters</dt><dd>${filterParts.join(", ")}</dd></div>`
@@ -486,7 +505,7 @@ function buildHeader(data: DashboardData): string {
 
 function buildStats(data: DashboardData): string {
   const h = data.headline;
-  const tiles: Array<[string, string, string | undefined]> = [
+  const tiles: [string, string, string | undefined][] = [
     [
       "Total cost",
       esc(h.totalCostLabel),
@@ -508,7 +527,7 @@ function buildStats(data: DashboardData): string {
           <div class="tile-label">${label}</div>
           <div class="tile-value">${value}</div>
           ${note ? `<div class="tile-note">${note}</div>` : ""}
-        </div>`,
+        </div>`
     )
     .join("");
   return `<section class="stats">${tileHtml}</section>`;
@@ -528,14 +547,14 @@ function buildDailyCost(data: DashboardData): string {
     })
     .join("");
   const chart = buildStackedBarSvg({
+    ariaLabel: "Daily cost by model",
     days: data.days,
+    formatValue: (v) => formatCost(v),
     series: series.map((s, i) => ({
-      label: s.model,
       colorVar: s.model === "other" ? "var(--series-other)" : seriesColorVar(i),
+      label: s.model,
       values: s.costsByDay,
     })),
-    formatValue: (v) => formatCost(v),
-    ariaLabel: "Daily cost by model",
   });
   return `
     <section>
@@ -555,18 +574,18 @@ function buildDailyTokens(data: DashboardData): string {
         <div class="legend-item">
           <span class="swatch" style="background:${seriesColorVar(TOKEN_CLASS_COLOR_INDEX[s.tokenClass])}"></span>
           ${esc(TOKEN_CLASS_LABELS[s.tokenClass])}
-        </div>`,
+        </div>`
     )
     .join("");
   const chart = buildStackedBarSvg({
+    ariaLabel: "Daily tokens by class",
     days: data.days,
+    formatValue: (v) => formatCompact(v),
     series: series.map((s) => ({
-      label: TOKEN_CLASS_LABELS[s.tokenClass],
       colorVar: seriesColorVar(TOKEN_CLASS_COLOR_INDEX[s.tokenClass]),
+      label: TOKEN_CLASS_LABELS[s.tokenClass],
       values: s.valuesByDay,
     })),
-    formatValue: (v) => formatCompact(v),
-    ariaLabel: "Daily tokens by class",
   });
   return `
     <section>
@@ -580,9 +599,9 @@ function buildDailyTokens(data: DashboardData): string {
 
 function buildCacheHitRate(data: DashboardData): string {
   const chart = buildLineChartSvg({
+    ariaLabel: "Cache hit-rate trend",
     days: data.days,
     values: data.cacheHitRate,
-    ariaLabel: "Cache hit-rate trend",
   });
   return `
     <section>
@@ -595,16 +614,16 @@ function buildCacheHitRate(data: DashboardData): string {
 
 function buildCompactionFrequency(data: DashboardData): string {
   const chart = buildStackedBarSvg({
+    ariaLabel: "Compaction frequency",
     days: data.days,
+    formatValue: (v) => formatNumber(v),
     series: [
       {
-        label: "compactions",
         colorVar: seriesColorVar(6),
+        label: "compactions",
         values: data.compactionCounts,
       },
     ],
-    formatValue: (v) => formatNumber(v),
-    ariaLabel: "Compaction frequency",
   });
   return `
     <section>
@@ -633,7 +652,7 @@ function buildPerProjectTable(data: DashboardData): string {
           <td>${formatCompact(r.tokens)}</td>
           <td>${esc(r.costLabel)}</td>
           <td>${esc(r.lastActivityISO.slice(0, 10))}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -668,7 +687,7 @@ function buildPerHarnessTable(data: DashboardData): string {
           <td>${formatCompact(r.tokens)}</td>
           <td>${esc(r.costLabel)}</td>
           <td>${r.unpricedSessionCount > 0 ? `${formatNumber(r.unpricedSessionCount)} unpriced` : "—"}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `

@@ -19,13 +19,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import {
-  type TotalsCacheRow,
   loadCache,
+  type TotalsCacheRow,
   toCacheRow,
 } from "../../src/cache/totals.js";
 import {
-  type ListCommandOptions,
   buildListReport,
+  type ListCommandOptions,
   loadEntries,
 } from "../../src/commands/list.js";
 import { priceSession, sessionTotals } from "../../src/engine/accounting.js";
@@ -37,28 +37,28 @@ const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 
 function makeRow(overrides: Partial<TotalsCacheRow> = {}): TotalsCacheRow {
   return {
-    path: "/fake/session.jsonl",
-    mtimeMs: 1000,
-    size: 500,
+    compactions: 0,
+    cwd: "/fake",
+    endedAt: "2026-01-01T00:05:00.000Z",
     harness: "claude-code" as HarnessId,
+    model: "claude-fake",
+    mtimeMs: 1000,
+    path: "/fake/session.jsonl",
+    size: 500,
+    startedAt: "2026-01-01T00:00:00.000Z",
     totals: {
-      tokens: {
-        inputUncached: 10,
-        cacheRead: 20,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
-        output: 30,
-        contextTotal: 60,
-      },
       cost: 1.23,
       priced: true,
+      tokens: {
+        cacheRead: 20,
+        cacheWrite1h: 0,
+        cacheWrite5m: 0,
+        contextTotal: 60,
+        inputUncached: 10,
+        output: 30,
+      },
     },
     turns: 4,
-    compactions: 0,
-    startedAt: "2026-01-01T00:00:00.000Z",
-    endedAt: "2026-01-01T00:05:00.000Z",
-    cwd: "/fake",
-    model: "claude-fake",
     ...overrides,
   };
 }
@@ -67,10 +67,10 @@ function refFor(row: TotalsCacheRow): SessionRef {
   return {
     harness: row.harness,
     id: "fake",
+    kind: "main",
+    mtime: new Date(row.mtimeMs),
     path: row.path,
     sizeBytes: row.size,
-    mtime: new Date(row.mtimeMs),
-    kind: "main",
   };
 }
 
@@ -121,7 +121,7 @@ describe("cache/totals", () => {
     const cache = await loadCache(cachePath);
     await cache.upsert([makeRow()]);
     expect(
-      cache.lookup(refFor(makeRow({ path: "/fake/other.jsonl" }))),
+      cache.lookup(refFor(makeRow({ path: "/fake/other.jsonl" })))
     ).toBeUndefined();
   });
 
@@ -141,29 +141,29 @@ describe("cache/totals", () => {
     expect(cache.lookup(refFor(good))).toEqual(good);
     expect(
       cache.lookup(
-        refFor(makeRow({ path: "/fake/bad.jsonl", mtimeMs: 0, size: 0 })),
-      ),
+        refFor(makeRow({ mtimeMs: 0, path: "/fake/bad.jsonl", size: 0 }))
+      )
     ).toBeUndefined();
   });
 
   it("treats a row with non-finite/negative numeric fields as a cache miss, not a poisoned hit", async () => {
     const good = makeRow();
     const poisoned = makeRow({
-      path: "/fake/poisoned.jsonl",
-      turns: -5,
       compactions: -1,
+      path: "/fake/poisoned.jsonl",
       totals: {
-        tokens: {
-          inputUncached: 1e308,
-          cacheRead: 0,
-          cacheWrite5m: 0,
-          cacheWrite1h: 0,
-          output: 0,
-          contextTotal: 1e308,
-        },
-        cost: -50000.5,
+        cost: -50_000.5,
         priced: true,
+        tokens: {
+          cacheRead: 0,
+          cacheWrite1h: 0,
+          cacheWrite5m: 0,
+          contextTotal: 1e308,
+          inputUncached: 1e308,
+          output: 0,
+        },
       },
+      turns: -5,
     });
     const lines = [JSON.stringify(good), JSON.stringify(poisoned)].join("\n");
     mkdirSync(dirname(cachePath), { recursive: true });
@@ -183,7 +183,7 @@ describe("cache/totals", () => {
     // "1e999" (-> Infinity) or invalid math, so the raw JSON text below spells that out.
     const badLine = JSON.stringify(makeRow()).replace(
       '"cost":1.23',
-      '"cost":1e999',
+      '"cost":1e999'
     );
     mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(cachePath, `${badLine}\n`, "utf8");
@@ -223,9 +223,12 @@ describe("cache/totals", () => {
     // Repeatedly upsert the SAME path with a changing mtime: each upsert
     // appends a line but live rows stay at 1, so linesOnDisk grows past
     // 2x live rows and triggers a compaction rewrite.
-    for (let i = 0; i < 5; i++) {
-      await cache.upsert([{ ...row, mtimeMs: row.mtimeMs + i }]);
-    }
+    await cache.upsert(
+      Array.from({ length: 5 }, (_, index) => ({
+        ...row,
+        mtimeMs: row.mtimeMs + index,
+      }))
+    );
 
     const raw = await readFile(cachePath, "utf8");
     const lineCount = raw.split("\n").filter((l) => l.trim() !== "").length;
@@ -242,7 +245,9 @@ describe("cache/totals", () => {
   it("toCacheRow mirrors sessionTotals/turns/compactions off a real session", async () => {
     const refs = await discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
     const ref = refs.find((r) => r.path.endsWith("normal-turns.jsonl"));
-    if (!ref) throw new Error("fixture ref not found: normal-turns");
+    if (!ref) {
+      throw new Error("fixture ref not found: normal-turns");
+    }
     const { session } = await parseClaudeSession(ref, { spans: false });
     const priced = priceSession(dedupSession(session), { mode: "auto" });
 
@@ -267,8 +272,8 @@ describe("cache/totals file permissions", () => {
   it("creates the cache dir as 0700 and appends the cache file as 0600", async () => {
     const cache = await loadCache(cachePath);
     await cache.upsert([makeRow()]);
-    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
-    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(cachePath)).mode % 0o1000).toBe(0o700);
+    expect(statSync(cachePath).mode % 0o1000).toBe(0o600);
   });
 
   it("keeps the compacted (tmp+rename) cache file at 0600", async () => {
@@ -276,14 +281,17 @@ describe("cache/totals file permissions", () => {
     const row = makeRow();
     // Same trigger as the "compacts the on-disk file" test above: repeated upserts of
     // the same path push linesOnDisk past 2x live rows.
-    for (let i = 0; i < 5; i++) {
-      await cache.upsert([{ ...row, mtimeMs: row.mtimeMs + i }]);
-    }
-    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+    await cache.upsert(
+      Array.from({ length: 5 }, (_, index) => ({
+        ...row,
+        mtimeMs: row.mtimeMs + index,
+      }))
+    );
+    expect(statSync(cachePath).mode % 0o1000).toBe(0o600);
   });
 
   it("tightens a pre-existing loosely-permissioned dir/file on write", async () => {
-    mkdirSync(dirname(cachePath), { recursive: true, mode: 0o755 });
+    mkdirSync(dirname(cachePath), { mode: 0o755, recursive: true });
     writeFileSync(cachePath, "", "utf8");
     chmodSync(dirname(cachePath), 0o755);
     chmodSync(cachePath, 0o644);
@@ -291,8 +299,8 @@ describe("cache/totals file permissions", () => {
     const cache = await loadCache(cachePath);
     await cache.upsert([makeRow()]);
 
-    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
-    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(cachePath)).mode % 0o1000).toBe(0o700);
+    expect(statSync(cachePath).mode % 0o1000).toBe(0o600);
   });
 
   it("tightens a pre-existing loosely-permissioned file/dir on load", async () => {
@@ -303,8 +311,8 @@ describe("cache/totals file permissions", () => {
 
     await loadCache(cachePath);
 
-    expect(statSync(dirname(cachePath)).mode & 0o777).toBe(0o700);
-    expect(statSync(cachePath).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(cachePath)).mode % 0o1000).toBe(0o700);
+    expect(statSync(cachePath).mode % 0o1000).toBe(0o600);
   });
 });
 
@@ -326,7 +334,7 @@ describe("list.ts loadEntries + totals cache integration", () => {
       join(scratchRoot, "v2.1.104"),
       {
         recursive: true,
-      },
+      }
     );
     xdgCacheHome = mkdtempSync(join(tmpdir(), "peek-xdg-cache-"));
     prevXdgCacheHome = process.env.XDG_CACHE_HOME;
@@ -342,7 +350,11 @@ describe("list.ts loadEntries + totals cache integration", () => {
   });
 
   function opts(extra: Partial<ListCommandOptions> = {}): ListCommandOptions {
-    return { roots: { "claude-code": [scratchRoot] }, ...extra };
+    return {
+      harness: "claude-code",
+      roots: { "claude-code": [scratchRoot] },
+      ...extra,
+    };
   }
 
   it("first call is all misses, second call (same files) is all hits", async () => {
@@ -352,16 +364,20 @@ describe("list.ts loadEntries + totals cache integration", () => {
     expect(first.cacheStats?.misses).toBe(first.entries.length);
     expect(first.cacheStats?.hits).toBe(0);
     // Cache-miss entries are freshly parsed — they carry `session`, not `cached`.
-    for (const e of first.entries) expect("session" in e).toBe(true);
+    for (const e of first.entries) {
+      expect("session" in e).toBe(true);
+    }
 
     const second = await loadEntries(opts());
     expect(second.cacheStats?.hits).toBe(first.entries.length);
     expect(second.cacheStats?.misses).toBe(0);
-    for (const e of second.entries) expect("cached" in e).toBe(true);
+    for (const e of second.entries) {
+      expect("cached" in e).toBe(true);
+    }
 
     // Row content is equivalent regardless of hit/miss path.
     expect(buildListReport(second.entries)).toEqual(
-      buildListReport(first.entries),
+      buildListReport(first.entries)
     );
   });
 
@@ -383,10 +399,14 @@ describe("list.ts loadEntries + totals cache integration", () => {
   it("--no-cache (cache: false) bypasses the cache entirely", async () => {
     const first = await loadEntries(opts({ cache: false }));
     expect(first.cacheStats).toBeUndefined();
-    for (const e of first.entries) expect("session" in e).toBe(true);
+    for (const e of first.entries) {
+      expect("session" in e).toBe(true);
+    }
 
     const second = await loadEntries(opts({ cache: false }));
     expect(second.cacheStats).toBeUndefined();
-    for (const e of second.entries) expect("session" in e).toBe(true); // still fresh, never cached
+    for (const e of second.entries) {
+      expect("session" in e).toBe(true); // still fresh, never cached
+    }
   });
 });

@@ -79,10 +79,14 @@ export interface DedupKey {
  * message.id or requestId.
  */
 export function extractDedupKey(turn: Turn): DedupKey | undefined {
-  if (turn.role !== "assistant") return undefined;
+  if (turn.role !== "assistant") {
+    return;
+  }
   const messageId = rawMessageId(turn);
   const requestId = rawRequestId(turn);
-  if (messageId === undefined || requestId === undefined) return undefined;
+  if (messageId === undefined || requestId === undefined) {
+    return;
+  }
   return { messageId, requestId };
 }
 
@@ -120,24 +124,26 @@ function usageEquals(a: NormalizedUsage, b: NormalizedUsage): boolean {
  * every fragment's spans in record order.
  */
 export function mergeStreamingSplit(turns: readonly Turn[]): Turn {
-  const first = turns[0];
+  const [first] = turns;
   if (first === undefined) {
     throw new Error("mergeStreamingSplit: turns must be non-empty");
   }
-  if (turns.length === 1) return first;
+  if (turns.length === 1) {
+    return first;
+  }
 
   const identical = turns.every((t) => usageEquals(t.usage, first.usage));
   const usageSource = identical
     ? first
     : turns.reduce((best, t) =>
-        totalTokenCount(t) > totalTokenCount(best) ? t : best,
+        totalTokenCount(t) > totalTokenCount(best) ? t : best
       );
 
   return {
     ...first,
-    usage: usageSource.usage,
-    contextTotal: usageSource.contextTotal,
     contentSpans: turns.flatMap((t) => t.contentSpans),
+    contextTotal: usageSource.contextTotal,
+    usage: usageSource.usage,
   };
 }
 
@@ -149,7 +155,7 @@ export function mergeStreamingSplit(turns: readonly Turn[]): Turn {
  * be non-empty.
  */
 export function pickSidechainWinner(turns: readonly Turn[]): Turn {
-  const first = turns[0];
+  const [first] = turns;
   if (first === undefined) {
     throw new Error("pickSidechainWinner: turns must be non-empty");
   }
@@ -166,13 +172,12 @@ export function pickSidechainWinner(turns: readonly Turn[]): Turn {
 }
 
 interface KeyedEntry {
-  turn: Turn;
   index: number;
   requestId: string;
+  turn: Turn;
 }
 
 export interface DedupResult {
-  turns: Turn[];
   /**
    * indexMap[originalIndex] = index in `turns` (the deduped array) of the
    * turn that survived/absorbed the turn originally at `originalIndex`.
@@ -182,6 +187,7 @@ export interface DedupResult {
    * turn's final position.
    */
   indexMap: number[];
+  turns: Turn[];
 }
 
 /**
@@ -212,21 +218,26 @@ export function dedupTurnsWithMap(turns: readonly Turn[]): DedupResult {
       byMessageId.set(key.messageId, byRequestId);
       messageIdOrder.push(key.messageId);
     }
-    const entry: KeyedEntry = { turn, index, requestId: key.requestId };
+    const entry: KeyedEntry = { index, requestId: key.requestId, turn };
     const group = byRequestId.get(key.requestId);
-    if (group) group.push(entry);
-    else byRequestId.set(key.requestId, [entry]);
+    if (group) {
+      group.push(entry);
+    } else {
+      byRequestId.set(key.requestId, [entry]);
+    }
   });
 
   for (const messageId of messageIdOrder) {
     const byRequestId = byMessageId.get(messageId);
-    if (!byRequestId) continue;
+    if (!byRequestId) {
+      continue;
+    }
 
     const requestGroups = [...byRequestId.values()];
     const merged = requestGroups.map((group) => ({
-      turn: mergeStreamingSplit(group.map((entry) => entry.turn)),
-      firstIndex: Math.min(...group.map((entry) => entry.index)),
       entries: group,
+      firstIndex: Math.min(...group.map((entry) => entry.index)),
+      turn: mergeStreamingSplit(group.map((entry) => entry.turn)),
     }));
 
     const anchorIndex = Math.min(...merged.map((m) => m.firstIndex));
@@ -234,7 +245,10 @@ export function dedupTurnsWithMap(turns: readonly Turn[]): DedupResult {
       merged.length === 1
         ? merged[0]?.turn
         : pickSidechainWinner(merged.map((m) => m.turn));
-    if (winner !== undefined) result[anchorIndex] = winner;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Preserve the empty-group guard for malformed input.
+    if (winner !== undefined) {
+      result[anchorIndex] = winner;
+    }
 
     for (const m of merged) {
       for (const entry of m.entries) {
@@ -245,18 +259,20 @@ export function dedupTurnsWithMap(turns: readonly Turn[]): DedupResult {
 
   const slotToFinalIndex: number[] = new Array(turns.length);
   const finalTurns: Turn[] = [];
-  for (let i = 0; i < result.length; i++) {
+  for (let i = 0; i < result.length; i += 1) {
     const turn = result[i];
-    if (turn === undefined) continue;
+    if (turn === undefined) {
+      continue;
+    }
     slotToFinalIndex[i] = finalTurns.length;
     finalTurns.push(turn);
   }
 
   const indexMap = turns.map(
-    (_, i) => slotToFinalIndex[absorbedInto[i] as number] as number,
+    (_, i) => slotToFinalIndex[absorbedInto[i] as number] as number
   );
 
-  return { turns: finalTurns, indexMap };
+  return { indexMap, turns: finalTurns };
 }
 
 /**
@@ -291,7 +307,9 @@ export function dedupSession(session: Session): Session {
   const preDedupLength = session.turns.length;
 
   const events = session.events.map((event) => {
-    if (event.kind !== "compaction") return event;
+    if (event.kind !== "compaction") {
+      return event;
+    }
     const turnIndex =
       event.turnIndex >= preDedupLength
         ? turns.length
@@ -299,7 +317,7 @@ export function dedupSession(session: Session): Session {
     return { ...event, turnIndex };
   });
 
-  return { ...session, turns, events };
+  return { ...session, events, turns };
 }
 
 // ---------------------------------------------------------------------------
@@ -309,12 +327,12 @@ export function dedupSession(session: Session): Session {
 function zeroNormalizedUsage(usage: NormalizedUsage): NormalizedUsage {
   return {
     ...usage,
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
-    ...(usage.reasoningOutput !== undefined ? { reasoningOutput: 0 } : {}),
+    ...(usage.reasoningOutput === undefined ? {} : { reasoningOutput: 0 }),
   };
 }
 
@@ -327,14 +345,14 @@ function zeroNormalizedUsage(usage: NormalizedUsage): NormalizedUsage {
  */
 function zeroCostBreakdown(cost: CostBreakdown): CostBreakdown {
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: 0,
+    cacheWrite5m: 0,
+    input: 0,
     mode: cost.mode,
+    output: 0,
     priced: true,
+    total: 0,
   };
 }
 
@@ -359,9 +377,9 @@ function zeroCostBreakdown(cost: CostBreakdown): CostBreakdown {
 function zeroOutTurn(turn: Turn): Turn {
   return {
     ...turn,
-    usage: zeroNormalizedUsage(turn.usage),
     contextTotal: 0,
     cost: zeroCostBreakdown(turn.cost),
+    usage: zeroNormalizedUsage(turn.usage),
   };
 }
 
@@ -402,11 +420,17 @@ export function dedupFamily(sessions: readonly Session[]): Session[] {
   return perFile.map((session) => ({
     ...session,
     turns: session.turns.map((turn) => {
-      if (turn.role !== "assistant") return turn;
+      if (turn.role !== "assistant") {
+        return turn;
+      }
       const messageId = rawMessageId(turn);
-      if (messageId === undefined) return turn;
+      if (messageId === undefined) {
+        return turn;
+      }
 
-      if (seenMessageId.has(messageId)) return zeroOutTurn(turn);
+      if (seenMessageId.has(messageId)) {
+        return zeroOutTurn(turn);
+      }
 
       seenMessageId.add(messageId);
       return turn;

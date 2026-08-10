@@ -9,7 +9,9 @@ function toNumber(value: unknown): number {
 }
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -36,10 +38,10 @@ export function normalizeClaudeUsage(raw: unknown): NormalizedUsage {
   }
 
   return {
-    inputUncached,
     cacheRead,
-    cacheWrite5m,
     cacheWrite1h,
+    cacheWrite5m,
+    inputUncached,
     output: toNumber(prop(raw, "output_tokens")),
     raw,
   };
@@ -58,12 +60,12 @@ export function normalizeCodexUsage(raw: unknown): NormalizedUsage {
   const reasoning = prop(raw, "reasoning_output_tokens");
 
   const usage: NormalizedUsage = {
+    cacheRead: cachedInput,
+    cacheWrite1h: 0,
+    cacheWrite5m: toNumber(prop(raw, "cache_write_input_tokens")),
     // Subset semantics measured on real captures; clamp so malformed data
     // (cached > total) can never produce a negative (engine review Q3).
     inputUncached: Math.max(0, inputTotal - cachedInput),
-    cacheRead: cachedInput,
-    cacheWrite5m: toNumber(prop(raw, "cache_write_input_tokens")),
-    cacheWrite1h: 0,
     output: toNumber(prop(raw, "output_tokens")),
     raw,
   };
@@ -88,12 +90,12 @@ export function normalizePiUsage(raw: unknown): NormalizedUsage {
   const reasoning = prop(raw, "reasoning");
 
   const usage: NormalizedUsage = {
-    inputUncached: toNumber(prop(raw, "input")),
     cacheRead: toNumber(prop(raw, "cacheRead")),
+    cacheWrite1h,
     cacheWrite5m: hasCacheWrite1h
       ? cacheWriteTotal - cacheWrite1h
       : cacheWriteTotal,
-    cacheWrite1h,
+    inputUncached: toNumber(prop(raw, "input")),
     output: toNumber(prop(raw, "output")),
     raw,
   };

@@ -6,7 +6,9 @@
 // docs/recon/codex.md § session_meta / turn_context for the source shapes.
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -15,7 +17,9 @@ function str(value: unknown): string | undefined {
 }
 
 function parseTimestamp(value: unknown): Date | undefined {
-  if (typeof value !== "string") return undefined;
+  if (typeof value !== "string") {
+    return;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
@@ -30,28 +34,38 @@ function parseTimestamp(value: unknown): Date | undefined {
  * plain Function spec has no serverName.
  */
 export interface CodexToolSchema {
-  name: string;
+  deferLoading?: boolean;
   description?: string;
   inputSchema?: unknown;
-  deferLoading?: boolean;
+  name: string;
   serverName?: string;
 }
 
 function buildToolSchema(
   node: unknown,
-  serverName?: string,
+  serverName?: string
 ): CodexToolSchema | undefined {
   const name = str(prop(node, "name"));
-  if (!name) return undefined;
+  if (!name) {
+    return;
+  }
 
   const schema: CodexToolSchema = { name };
   const description = str(prop(node, "description"));
-  if (description !== undefined) schema.description = description;
+  if (description !== undefined) {
+    schema.description = description;
+  }
   const inputSchema = prop(node, "input_schema");
-  if (inputSchema !== undefined) schema.inputSchema = inputSchema;
+  if (inputSchema !== undefined) {
+    schema.inputSchema = inputSchema;
+  }
   const deferLoading = prop(node, "defer_loading");
-  if (typeof deferLoading === "boolean") schema.deferLoading = deferLoading;
-  if (serverName !== undefined) schema.serverName = serverName;
+  if (typeof deferLoading === "boolean") {
+    schema.deferLoading = deferLoading;
+  }
+  if (serverName !== undefined) {
+    schema.serverName = serverName;
+  }
   return schema;
 }
 
@@ -64,7 +78,9 @@ function buildToolSchema(
  * a `tools` array, since both shapes key off `name`.
  */
 export function extractToolSchemas(dynamicTools: unknown): CodexToolSchema[] {
-  if (!Array.isArray(dynamicTools)) return [];
+  if (!Array.isArray(dynamicTools)) {
+    return [];
+  }
   const flattened: CodexToolSchema[] = [];
 
   for (const entry of dynamicTools) {
@@ -73,13 +89,17 @@ export function extractToolSchemas(dynamicTools: unknown): CodexToolSchema[] {
       const serverName = str(prop(entry, "name"));
       for (const tool of tools) {
         const schema = buildToolSchema(tool, serverName);
-        if (schema) flattened.push(schema);
+        if (schema) {
+          flattened.push(schema);
+        }
       }
       continue;
     }
 
     const schema = buildToolSchema(entry);
-    if (schema) flattened.push(schema);
+    if (schema) {
+      flattened.push(schema);
+    }
   }
 
   return flattened;
@@ -96,19 +116,21 @@ export function extractToolSchemas(dynamicTools: unknown): CodexToolSchema[] {
  */
 function extractGitBranch(payload: unknown): string | undefined {
   const nested = str(prop(prop(payload, "git"), "branch"));
-  if (nested !== undefined) return nested;
+  if (nested !== undefined) {
+    return nested;
+  }
   return str(prop(payload, "branch"));
 }
 
 export interface SessionMetaInfo {
-  harnessVersion: string;
   cwd: string;
-  startedAt: Date;
   gitBranch?: string;
+  harnessVersion: string;
+  model?: string;
+  startedAt: Date;
   systemPrompt?: string;
   /** Serialized CodexToolSchema[] — Session.configSnapshot.toolSchemas is a string. */
   toolSchemas?: string;
-  model?: string;
 }
 
 /**
@@ -129,17 +151,25 @@ export function extractSessionMeta(payload: unknown): SessionMetaInfo {
   const toolSchemas = extractToolSchemas(prop(payload, "dynamic_tools"));
   const model = str(prop(payload, "model"));
 
-  const info: SessionMetaInfo = { harnessVersion, cwd, startedAt };
-  if (gitBranch !== undefined) info.gitBranch = gitBranch;
-  if (systemPrompt !== undefined) info.systemPrompt = systemPrompt;
-  if (toolSchemas.length > 0) info.toolSchemas = JSON.stringify(toolSchemas);
-  if (model !== undefined) info.model = model;
+  const info: SessionMetaInfo = { cwd, harnessVersion, startedAt };
+  if (gitBranch !== undefined) {
+    info.gitBranch = gitBranch;
+  }
+  if (systemPrompt !== undefined) {
+    info.systemPrompt = systemPrompt;
+  }
+  if (toolSchemas.length > 0) {
+    info.toolSchemas = JSON.stringify(toolSchemas);
+  }
+  if (model !== undefined) {
+    info.model = model;
+  }
   return info;
 }
 
 export interface TurnContextInfo {
-  model?: string;
   effort?: string;
+  model?: string;
   projectInstructions?: string;
   /** turn_context.truncation_policy.limit (bytes) — for T4.4's span
    * `truncated` flag when it builds the projectInstructions Span. */
@@ -159,10 +189,14 @@ export function extractTurnContext(payload: unknown): TurnContextInfo {
   const info: TurnContextInfo = {};
 
   const model = str(prop(payload, "model"));
-  if (model !== undefined) info.model = model;
+  if (model !== undefined) {
+    info.model = model;
+  }
 
   const effort = str(prop(payload, "effort"));
-  if (effort !== undefined) info.effort = effort;
+  if (effort !== undefined) {
+    info.effort = effort;
+  }
 
   const userInstructions = str(prop(payload, "user_instructions"));
   if (userInstructions !== undefined) {
@@ -170,7 +204,9 @@ export function extractTurnContext(payload: unknown): TurnContextInfo {
   }
 
   const limit = prop(prop(payload, "truncation_policy"), "limit");
-  if (typeof limit === "number") info.truncationLimitBytes = limit;
+  if (typeof limit === "number") {
+    info.truncationLimitBytes = limit;
+  }
 
   return info;
 }
