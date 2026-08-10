@@ -10,7 +10,7 @@ describe("serializeJSON", () => {
   it("2-space indents and omits undefined properties, like JSON.stringify", () => {
     const out = serializeJSON({ a: 1, b: undefined, c: { d: 2 } });
     expect(out).toBe(
-      JSON.stringify({ a: 1, b: undefined, c: { d: 2 } }, null, 2),
+      JSON.stringify({ a: 1, b: undefined, c: { d: 2 } }, null, 2)
     );
     expect(JSON.parse(out)).toEqual({ a: 1, c: { d: 2 } });
   });

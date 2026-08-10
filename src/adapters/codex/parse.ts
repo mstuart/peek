@@ -26,11 +26,11 @@ import {
 } from "./compacted.js";
 import { buildResponseItemTurn, createCodexItemState } from "./items.js";
 import {
-  type TurnContextInfo,
   extractSessionMeta,
   extractTurnContext,
+  type TurnContextInfo,
 } from "./meta.js";
-import { type RawCodexRecord, readCodexRecords } from "./records.js";
+import { readCodexRecords } from "./records.js";
 import {
   checkCumulativeCrossCheck,
   createCodexUsageState,
@@ -63,7 +63,9 @@ export interface ParseCodexSessionOptions {
 }
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -72,9 +74,10 @@ function prop(raw: unknown, key: string): unknown {
  * only, returning the internal parse state alongside so downstream tasks
  * can extend the same pass instead of re-reading the file.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Transcript dispatch intentionally handles tolerant wire variants in one pass.
 export async function buildSessionSkeleton(
   ref: SessionRef,
-  opts: ParseCodexSessionOptions = {},
+  opts: ParseCodexSessionOptions = {}
 ): Promise<{
   session: Session;
   warnings: ParseWarning[];
@@ -112,7 +115,9 @@ export async function buildSessionSkeleton(
 
   for (const record of records) {
     if (record.timestamp) {
-      if (!startedAt) startedAt = record.timestamp;
+      if (!startedAt) {
+        startedAt = record.timestamp;
+      }
       endedAt = record.timestamp;
     }
 
@@ -122,13 +127,26 @@ export async function buildSessionSkeleton(
       if (!sawSessionMeta) {
         sawSessionMeta = true;
         const meta = extractSessionMeta(record.payload);
-        harnessVersion = meta.harnessVersion;
-        if (meta.cwd) cwd = meta.cwd;
-        gitBranch = meta.gitBranch;
-        systemPrompt = meta.systemPrompt;
-        toolSchemas = meta.toolSchemas;
-        sessionMetaModel = meta.model;
-        if (!startedAt) startedAt = meta.startedAt;
+        const {
+          cwd: metaCwd,
+          gitBranch: metaGitBranch,
+          harnessVersion: metaHarnessVersion,
+          model: metaModel,
+          startedAt: metaStartedAt,
+          systemPrompt: metaSystemPrompt,
+          toolSchemas: metaToolSchemas,
+        } = meta;
+        harnessVersion = metaHarnessVersion;
+        if (metaCwd) {
+          cwd = metaCwd;
+        }
+        gitBranch = metaGitBranch;
+        systemPrompt = metaSystemPrompt;
+        toolSchemas = metaToolSchemas;
+        sessionMetaModel = metaModel;
+        if (!startedAt) {
+          startedAt = metaStartedAt;
+        }
       }
       continue;
     }
@@ -136,27 +154,28 @@ export async function buildSessionSkeleton(
     if (record.type === "turn_context") {
       const info = extractTurnContext(record.payload);
       state.turnContexts.push(info);
+      const { model: infoModel, projectInstructions: infoInstructions } = info;
 
-      if (info.projectInstructions !== undefined) {
-        projectInstructions = info.projectInstructions;
+      if (infoInstructions !== undefined) {
+        projectInstructions = infoInstructions;
       }
 
-      if (info.model !== undefined) {
+      if (infoModel !== undefined) {
         // Only a REAL prior model (from an earlier turn_context) makes a
         // transition meaningful — the initial "unknown"/session_meta
         // sentinel is not a genuine prior state, so no ModeChange fires on
         // the first turn_context that supplies a model.
-        if (currentModel !== undefined && info.model !== currentModel) {
+        if (currentModel !== undefined && infoModel !== currentModel) {
           const change: ModeChange = {
-            kind: "modeChange",
             at: record.timestamp ?? endedAt ?? new Date(0),
             field: "model",
             from: currentModel,
-            to: info.model,
+            kind: "modeChange",
+            to: infoModel,
           };
           events.push(change);
         }
-        currentModel = info.model;
+        currentModel = infoModel;
       }
       continue;
     }
@@ -168,9 +187,11 @@ export async function buildSessionSkeleton(
         currentModel ?? sessionMetaModel ?? "unknown",
         state.turnContexts.at(-1),
         warnings,
-        spansEnabled,
+        spansEnabled
       );
-      if (turn) turns.push(turn);
+      if (turn) {
+        turns.push(turn);
+      }
     }
 
     if (record.type === "event_msg") {
@@ -182,7 +203,7 @@ export async function buildSessionSkeleton(
         } else {
           const event = buildMinimalCompactionEventFromMarker(
             record.timestamp ?? endedAt ?? new Date(0),
-            turns,
+            turns
           );
           events.push(event);
         }
@@ -197,7 +218,7 @@ export async function buildSessionSkeleton(
       const event: CompactionEvent = buildCompactionEventFromCompactedRecord(
         record.payload,
         record.timestamp ?? endedAt ?? new Date(0),
-        turns,
+        turns
       );
       events.push(event);
       pendingCompactedRecordConsumesNextMarker = true;
@@ -214,34 +235,34 @@ export async function buildSessionSkeleton(
   const model = currentModel ?? sessionMetaModel ?? "unknown";
 
   const session: Session = {
+    cwd,
     harness: "codex",
     harnessVersion,
     id: ref.id,
-    cwd,
-    ...(gitBranch !== undefined ? { gitBranch } : {}),
-    startedAt: startedAt ?? new Date(0),
-    endedAt: endedAt ?? startedAt ?? new Date(0),
+    ...(gitBranch === undefined ? {} : { gitBranch }),
+    children: [], // no on-disk codex subagent linkage discoverable from the JSONL tree
     configSnapshot: {
-      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-      ...(projectInstructions !== undefined ? { projectInstructions } : {}),
-      ...(toolSchemas !== undefined ? { toolSchemas } : {}),
+      ...(systemPrompt === undefined ? {} : { systemPrompt }),
+      ...(projectInstructions === undefined ? {} : { projectInstructions }),
+      ...(toolSchemas === undefined ? {} : { toolSchemas }),
       model,
       modelChanges: events.filter(
-        (event): event is ModeChange => event.kind === "modeChange",
+        (event): event is ModeChange => event.kind === "modeChange"
       ),
     },
-    turns,
+    endedAt: endedAt ?? startedAt ?? new Date(0),
     events,
-    children: [], // no on-disk codex subagent linkage discoverable from the JSONL tree
+    startedAt: startedAt ?? new Date(0),
+    turns,
     warnings,
   };
 
-  return { session, warnings, state };
+  return { session, state, warnings };
 }
 
 export async function parseCodexSession(
   ref: SessionRef,
-  opts: ParseCodexSessionOptions = {},
+  opts: ParseCodexSessionOptions = {}
 ): Promise<ParseResult> {
   const { session, warnings } = await buildSessionSkeleton(ref, opts);
   return { session, warnings };

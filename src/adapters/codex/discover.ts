@@ -35,7 +35,9 @@ const TRAILING_UUID_RE =
 
 function idFromFilename(fileName: string): string {
   const match = TRAILING_UUID_RE.exec(fileName);
-  if (match?.[1]) return match[1];
+  if (match?.[1]) {
+    return match[1];
+  }
   // Synthetic/real-capture fixtures use descriptive names with no uuid —
   // fall back to the filename stem so discovery still works uniformly.
   return fileName.endsWith(".jsonl")
@@ -55,10 +57,13 @@ async function walk(dir: string, refs: SessionRef[]): Promise<void> {
   for (const entry of await readDirSafe(dir)) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      // biome-ignore lint/performance/noAwaitInLoops: Keep recursive filesystem traversal bounded.
       await walk(full, refs);
       continue;
     }
-    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+    if (!(entry.isFile() && entry.name.endsWith(".jsonl"))) {
+      continue;
+    }
 
     let info: { size: number; mtime: Date };
     try {
@@ -70,10 +75,10 @@ async function walk(dir: string, refs: SessionRef[]): Promise<void> {
     refs.push({
       harness: "codex",
       id: idFromFilename(entry.name),
+      kind: "main",
+      mtime: info.mtime,
       path: full,
       sizeBytes: info.size,
-      mtime: info.mtime,
-      kind: "main",
     });
   }
 }
@@ -84,17 +89,23 @@ async function walk(dir: string, refs: SessionRef[]): Promise<void> {
  * array — never throws.
  */
 export async function discoverCodexSessions(
-  roots?: string[],
+  roots?: string[]
 ): Promise<SessionRef[]> {
   const rootDirs = roots ?? [DEFAULT_ROOT];
   const refs: SessionRef[] = [];
 
   for (const root of rootDirs) {
+    // biome-ignore lint/performance/noAwaitInLoops: Keep recursive filesystem traversal bounded.
     await walk(root, refs);
   }
 
   // Sort by path ascending: deterministic even when fixtures/files share an
   // mtime (e.g. all checked out in the same commit), unlike an mtime sort.
-  refs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  refs.sort((a, b) => {
+    if (a.path < b.path) {
+      return -1;
+    }
+    return a.path > b.path ? 1 : 0;
+  });
   return refs;
 }

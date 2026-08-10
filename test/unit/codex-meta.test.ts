@@ -11,22 +11,26 @@ import {
 } from "../../src/adapters/codex/records.js";
 import type { SessionRef } from "../../src/model/types.js";
 
-const FIXTURES_ROOT = path.join(__dirname, "../fixtures/codex");
+const FIXTURES_ROOT = path.join(import.meta.dirname, "../fixtures/codex");
 
-async function refs(): Promise<SessionRef[]> {
+function refs(): Promise<SessionRef[]> {
   return discoverCodexSessions([FIXTURES_ROOT]);
 }
 
 function findRef(all: SessionRef[], id: string): SessionRef {
   const ref = all.find((r) => r.id === id);
-  if (!ref) throw new Error(`fixture ref not found: ${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${id}`);
+  }
   return ref;
 }
 
 describe("discoverCodexSessions", () => {
   it("finds all 6 fixture files under test/fixtures/codex with ids from filenames", async () => {
     const all = await refs();
-    expect(all.map((r) => r.id).sort()).toEqual(
+    expect(
+      all.map((r) => r.id).sort((left, right) => left.localeCompare(right))
+    ).toEqual(
       [
         "basic-session",
         "compaction",
@@ -34,7 +38,7 @@ describe("discoverCodexSessions", () => {
         "real-capture-redacted",
         "real-capture-tools-redacted",
         "unknown-variant",
-      ].sort(),
+      ].sort()
     );
     for (const ref of all) {
       expect(ref.harness).toBe("codex");
@@ -64,7 +68,7 @@ describe("discoverCodexSessions", () => {
       const uuid = "019fe370-1c75-7323-a8c7-3db2a673d0ce";
       await writeFile(
         path.join(dayDir, `rollout-2026-08-08T15-13-23-${uuid}.jsonl`),
-        '{"timestamp":"2026-08-08T15:13:23.000Z","type":"session_meta","payload":{}}\n',
+        '{"timestamp":"2026-08-08T15:13:23.000Z","type":"session_meta","payload":{}}\n'
       );
 
       const found = await discoverCodexSessions([tmpRoot]);
@@ -72,7 +76,7 @@ describe("discoverCodexSessions", () => {
       expect(found[0]?.id).toBe(uuid);
       expect(found[0]?.kind).toBe("main");
     } finally {
-      await rm(tmpRoot, { recursive: true, force: true });
+      await rm(tmpRoot, { force: true, recursive: true });
     }
   });
 });
@@ -107,7 +111,7 @@ describe("parseCodexSession — v0.88/basic-session.jsonl", () => {
     const { session } = await parseCodexSession(ref);
     expect(session.configSnapshot.systemPrompt).toBeDefined();
     expect(session.configSnapshot.systemPrompt?.length ?? 0).toBeGreaterThan(
-      300,
+      300
     );
   });
 
@@ -116,7 +120,7 @@ describe("parseCodexSession — v0.88/basic-session.jsonl", () => {
     const ref = findRef(all, "basic-session");
     const { session } = await parseCodexSession(ref);
     expect(session.configSnapshot.projectInstructions).toContain(
-      "AGENTS.md instructions for",
+      "AGENTS.md instructions for"
     );
   });
 
@@ -150,7 +154,7 @@ describe("parseCodexSession — v0.134/full-turn.jsonl", () => {
     expect(session.configSnapshot.toolSchemas).toBeDefined();
 
     const tools = JSON.parse(
-      session.configSnapshot.toolSchemas as string,
+      session.configSnapshot.toolSchemas as string
     ) as CodexToolSchema[];
     expect(tools).toHaveLength(3);
 
@@ -159,10 +163,11 @@ describe("parseCodexSession — v0.134/full-turn.jsonl", () => {
     expect(plain?.serverName).toBeUndefined();
 
     const namespaced = tools.filter((t) => t.serverName === "github");
-    expect(namespaced.map((t) => t.name).sort()).toEqual([
-      "create_issue",
-      "search_code",
-    ]);
+    expect(
+      namespaced
+        .map((t) => t.name)
+        .sort((left, right) => left.localeCompare(right))
+    ).toEqual(["create_issue", "search_code"]);
   });
 
   it("gitBranch is main (flattened field shape)", async () => {
@@ -252,7 +257,9 @@ describe("parseCodexSession — v0.134/unknown-variant.jsonl", () => {
     const ref = findRef(all, "unknown-variant");
     const { warnings } = await parseCodexSession(ref);
     expect(warnings).toHaveLength(2);
-    const codes = warnings.map((w) => w.code).sort();
+    const codes = warnings
+      .map((w) => w.code)
+      .sort((left, right) => left.localeCompare(right));
     expect(codes).toEqual(["unknown-event-msg", "unknown-response-item"]);
   });
 

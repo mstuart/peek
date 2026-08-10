@@ -81,7 +81,7 @@ export const ALLOWLIST_KEYS = new Set(
     "effort",
     "model_provider",
     "userType",
-  ].map(normalizeKey),
+  ].map(normalizeKey)
 );
 
 // Fields that are identifiers by key name regardless of their string shape —
@@ -101,7 +101,7 @@ const ID_KEY_NAMES = new Set(
     "promptId",
     "callId",
     "childId",
-  ].map(normalizeKey),
+  ].map(normalizeKey)
 );
 
 // Fields that are paths/branch-names/URLs by key name — always routed through
@@ -118,7 +118,7 @@ const PATH_KEYS = new Set(
     "branch",
     "repository_url",
     "repositoryUrl",
-  ].map(normalizeKey),
+  ].map(normalizeKey)
 );
 
 // "name" is too broad to blanket-allowlist (would pass through user content
@@ -127,7 +127,7 @@ const PATH_KEYS = new Set(
 // sibling keys (Codex `function_call` has call_id + arguments; `dynamic_tools`
 // specs have input_schema). Checked context-aware in redactRecord, not here.
 const TOOL_CALL_CONTEXT_SIBLING_KEYS = new Set(
-  ["call_id", "arguments", "input_schema", "tool_use_id"].map(normalizeKey),
+  ["call_id", "arguments", "input_schema", "tool_use_id"].map(normalizeKey)
 );
 const TOOL_CALL_NAME_KEYS = new Set(["name", "toolName"].map(normalizeKey));
 
@@ -179,7 +179,7 @@ const STRUCTURAL_TAGS = [
 
 const STRUCTURAL_TAG_SPLIT_RE = new RegExp(
   `(${STRUCTURAL_TAGS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
-  "g",
+  "g"
 );
 
 // Splits `text` on structural tags, keeping tag segments verbatim and
@@ -190,7 +190,9 @@ function scrambleWithTags(text: string, seedBase: string): string {
   const parts = text.split(STRUCTURAL_TAG_SPLIT_RE);
   let out = "";
   parts.forEach((part, i) => {
-    if (part.length === 0) return;
+    if (part.length === 0) {
+      return;
+    }
     if (STRUCTURAL_TAGS.includes(part)) {
       out += part;
     } else {
@@ -215,19 +217,24 @@ function seedFromString(s: string): number {
 }
 
 function mulberry32(seed: number): () => number {
+  // biome-ignore lint/suspicious/noBitwiseOperators: Mulberry32 requires exact 32-bit arithmetic.
   let a = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) | 0;
+    // biome-ignore lint/suspicious/noBitwiseOperators: Mulberry32 requires exact 32-bit arithmetic.
+    a = (a + 0x6d_2b_79_f5) | 0;
+    // biome-ignore lint/suspicious/noBitwiseOperators: Mulberry32 requires exact 32-bit arithmetic.
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    // biome-ignore lint/suspicious/noBitwiseOperators: Mulberry32 requires exact 32-bit arithmetic.
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    // biome-ignore lint/suspicious/noBitwiseOperators: Mulberry32 requires exact 32-bit arithmetic.
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
 function scrambleCharset(seedKey: string, length: number): string {
   const rand = mulberry32(seedFromString(seedKey));
   let out = "";
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < length; i += 1) {
     out += CHARSET.charAt(Math.floor(rand() * CHARSET.length));
   }
   return out;
@@ -246,26 +253,26 @@ function fakeUuidFrom(original: string): string {
 // ---------------------------------------------------------------------------
 
 export interface RedactStats {
+  idsRemapped: number;
   linesProcessed: number;
   stringsScrambled: number;
-  idsRemapped: number;
 }
 
 export interface RedactContext {
-  textMap: Map<string, string>;
   idMap: Map<string, string>;
   pathMap: Map<string, string>;
   segmentMap: Map<string, string>;
   stats: RedactStats;
+  textMap: Map<string, string>;
 }
 
 export function createRedactContext(): RedactContext {
   return {
-    textMap: new Map(),
     idMap: new Map(),
     pathMap: new Map(),
     segmentMap: new Map(),
-    stats: { linesProcessed: 0, stringsScrambled: 0, idsRemapped: 0 },
+    stats: { idsRemapped: 0, linesProcessed: 0, stringsScrambled: 0 },
+    textMap: new Map(),
   };
 }
 
@@ -287,15 +294,27 @@ function classify(key: string | undefined, value: string): StringClass {
   // value itself is enum-shaped (no spaces). A free-text value that happens
   // to land on an allowlisted key name (e.g. a tool's own `status` field
   // carrying a sentence) falls through to the checks below instead.
-  if (key && ALLOWLIST_KEYS.has(nk) && ENUM_SHAPE_RE.test(value))
+  if (key && ALLOWLIST_KEYS.has(nk) && ENUM_SHAPE_RE.test(value)) {
     return "allowlist";
-  if (ISO_TIMESTAMP_RE.test(value)) return "timestamp";
-  if (key && PATH_KEYS.has(nk)) return "path";
-  if (value.startsWith("/Users/")) return "path";
-  if (UUID_RE.test(value) || TOOLU_RE.test(value) || MSG_ID_RE.test(value))
+  }
+  if (ISO_TIMESTAMP_RE.test(value)) {
+    return "timestamp";
+  }
+  if (key && PATH_KEYS.has(nk)) {
+    return "path";
+  }
+  if (value.startsWith("/Users/")) {
+    return "path";
+  }
+  if (UUID_RE.test(value) || TOOLU_RE.test(value) || MSG_ID_RE.test(value)) {
     return "id";
-  if (key && ID_KEY_NAMES.has(nk)) return "id";
-  if (value.length > 8) return "scramble";
+  }
+  if (key && ID_KEY_NAMES.has(nk)) {
+    return "id";
+  }
+  if (value.length > 8) {
+    return "scramble";
+  }
   // Gap 2 fix: a short (≤8 char) value only passes through unclassified when
   // it's also enum-shaped. Anything with a space or symbol outside the
   // identifier charset is scrambled instead of assumed harmless.
@@ -304,19 +323,23 @@ function classify(key: string | undefined, value: string): StringClass {
 
 function scrambleFreeText(original: string, ctx: RedactContext): string {
   const cached = ctx.textMap.get(original);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   const prefix = STRUCTURAL_PREFIXES.find((p) => original.startsWith(p));
   const head = prefix ?? "";
   const rest = original.slice(head.length);
   const result = head + scrambleWithTags(rest, original);
   ctx.textMap.set(original, result);
-  ctx.stats.stringsScrambled++;
+  ctx.stats.stringsScrambled += 1;
   return result;
 }
 
 function remapId(original: string, ctx: RedactContext): string {
   const cached = ctx.idMap.get(original);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   let fake: string;
   if (UUID_RE.test(original)) {
     fake = fakeUuidFrom(original);
@@ -328,14 +351,18 @@ function remapId(original: string, ctx: RedactContext): string {
     fake = scrambleCharset(original, original.length);
   }
   ctx.idMap.set(original, fake);
-  ctx.stats.idsRemapped++;
+  ctx.stats.idsRemapped += 1;
   return fake;
 }
 
 function remapSegment(seg: string, ctx: RedactContext): string {
-  if (seg === "" || seg === "Users") return seg; // structural, not sensitive
+  if (seg === "" || seg === "Users") {
+    return seg; // structural, not sensitive
+  }
   const cached = ctx.segmentMap.get(seg);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   const dot = seg.lastIndexOf(".");
   let fake: string;
   if (dot > 0 && dot < seg.length - 1 && seg.length - dot <= 8) {
@@ -351,20 +378,22 @@ function remapSegment(seg: string, ctx: RedactContext): string {
 
 function remapPath(original: string, ctx: RedactContext): string {
   const cached = ctx.pathMap.get(original);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   const fake = original
     .split("/")
     .map((seg) => remapSegment(seg, ctx))
     .join("/");
   ctx.pathMap.set(original, fake);
-  ctx.stats.idsRemapped++;
+  ctx.stats.idsRemapped += 1;
   return fake;
 }
 
 function redactStringValue(
   value: string,
   key: string | undefined,
-  ctx: RedactContext,
+  ctx: RedactContext
 ): string {
   switch (classify(key, value)) {
     case "allowlist":
@@ -377,6 +406,8 @@ function redactStringValue(
       return remapId(value, ctx);
     case "scramble":
       return scrambleFreeText(value, ctx);
+    default:
+      return value;
   }
 }
 
@@ -385,7 +416,7 @@ function tryParseJsonObjectOrArray(s: string): unknown {
     const parsed = JSON.parse(s);
     return parsed !== null && typeof parsed === "object" ? parsed : undefined;
   } catch {
-    return undefined;
+    // Non-JSON strings are redacted as ordinary text by the caller.
   }
 }
 
@@ -393,7 +424,7 @@ function tryParseJsonObjectOrArray(s: string): unknown {
 export function redactRecord(
   value: unknown,
   ctx: RedactContext,
-  key?: string,
+  key?: string
 ): unknown {
   if (value === null || typeof value !== "object") {
     return typeof value === "string"
@@ -409,7 +440,7 @@ export function redactRecord(
   // looks like a tool-call/tool-spec object (has call_id/arguments/
   // input_schema/tool_use_id as a sibling key) — see Gap 2 note above.
   const isToolCallLikeObject = entries.some(([k]) =>
-    TOOL_CALL_CONTEXT_SIBLING_KEYS.has(normalizeKey(k)),
+    TOOL_CALL_CONTEXT_SIBLING_KEYS.has(normalizeKey(k))
   );
   for (const [k, v] of entries) {
     if (
@@ -439,8 +470,9 @@ export function redactRecord(
 // ---------------------------------------------------------------------------
 
 function isCodexLineShape(value: unknown): boolean {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
+  }
   const keys = Object.keys(value as Record<string, unknown>);
   return (
     keys.length === 3 &&
@@ -452,9 +484,9 @@ function isCodexLineShape(value: unknown): boolean {
 
 function main(): void {
   const [inputPath, outputPath] = process.argv.slice(2);
-  if (!inputPath || !outputPath) {
+  if (!(inputPath && outputPath)) {
     console.error(
-      "Usage: npx tsx scripts/redact.ts <input.jsonl> <output.jsonl>",
+      "Usage: npx tsx scripts/redact.ts <input.jsonl> <output.jsonl>"
     );
     process.exit(1);
   }
@@ -462,8 +494,10 @@ function main(): void {
   const raw = readFileSync(inputPath, "utf8");
   const trailingNewline = raw.endsWith("\n");
   const lines = raw.split("\n");
-  const lastLine = lines[lines.length - 1];
-  if (trailingNewline && lastLine === "") lines.pop();
+  const lastLine = lines.at(-1);
+  if (trailingNewline && lastLine === "") {
+    lines.pop();
+  }
 
   const ctx = createRedactContext();
   let codexLines = 0;
@@ -481,23 +515,27 @@ function main(): void {
     } catch (err) {
       throw new Error(
         `redact.ts: invalid JSON on line ${i + 1} of ${inputPath}: ${(err as Error).message}`,
+        { cause: err }
       );
     }
-    if (isCodexLineShape(parsed)) codexLines++;
-    else claudeLines++;
+    if (isCodexLineShape(parsed)) {
+      codexLines += 1;
+    } else {
+      claudeLines += 1;
+    }
     outLines.push(JSON.stringify(redactRecord(parsed, ctx)));
-    ctx.stats.linesProcessed++;
+    ctx.stats.linesProcessed += 1;
   });
 
   writeFileSync(
     outputPath,
     outLines.join("\n") + (trailingNewline ? "\n" : ""),
-    "utf8",
+    "utf8"
   );
 
   console.log(`peek redact: ${inputPath} -> ${outputPath}`);
   console.log(
-    `  lines processed:   ${ctx.stats.linesProcessed} (${claudeLines} claude-code-shaped, ${codexLines} codex-shaped)`,
+    `  lines processed:   ${ctx.stats.linesProcessed} (${claudeLines} claude-code-shaped, ${codexLines} codex-shaped)`
   );
   console.log(`  strings scrambled: ${ctx.stats.stringsScrambled}`);
   console.log(`  ids remapped:      ${ctx.stats.idsRemapped}`);

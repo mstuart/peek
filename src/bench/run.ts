@@ -31,12 +31,14 @@ import {
   type TrialSpec,
 } from "./types.js";
 import {
-  type SetupResult,
-  type Workspace,
   createWorkspace as createWorkspaceReal,
   destroyWorkspace as destroyWorkspaceReal,
   runSetup as runSetupReal,
+  type SetupResult,
+  type Workspace,
 } from "./workspace.js";
+
+const JSONL_EXTENSION_RE = /\.jsonl$/;
 
 // ---------------------------------------------------------------------------
 // Config selection — just a name + a variant dir ("current" = baseline, the
@@ -46,8 +48,8 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface ConfigVariant {
-  name: string;
   dir: string | "current";
+  name: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,62 +60,62 @@ export interface ConfigVariant {
 // ---------------------------------------------------------------------------
 
 export interface OrchestrateDeps {
-  createWorkspace(
-    repoDir: string,
-    scratchRoot: string,
-    id: string,
-  ): Promise<Workspace>;
-  destroyWorkspace(ws: Workspace): Promise<void>;
-  runSetup(
-    ws: Workspace,
-    setup: string[],
-    timeoutMs: number,
-  ): Promise<SetupResult>;
   /** Returns the resolved model (from the variant dir's one-line `model`
    * file), when set. */
-  applyConfig(
+  applyConfig: (
     variantDir: string | "current",
-    workspaceDir: string,
-  ): Promise<{ model?: string }>;
-  /** Runs the task's `verify` command (a shell command line, same as each
-   * `setup[]` entry) via proc.ts's spawnDetached, through `/bin/sh -c`. */
-  runVerify(
-    verifyCmd: string,
-    cwd: string,
-    timeoutMs: number,
-  ): Promise<{ exitCode: number | null; timedOut: boolean }>;
+    workspaceDir: string
+  ) => Promise<{ model?: string }>;
+  createWorkspace: (
+    repoDir: string,
+    scratchRoot: string,
+    id: string
+  ) => Promise<Workspace>;
+  destroyWorkspace: (ws: Workspace) => Promise<void>;
+  /** Test seam — defaults to `() => new Date()`. */
+  now?: () => Date;
   /** parseAndDedup + priceSession({mode:"auto"}) + sessionTotals() + a count
    * of session.events with kind:"compaction" -> SessionTotalsLike. Never
    * throws — an unparseable/missing transcript resolves to undefined (an
    * honestly-absent total, not a pipeline failure — compare.ts's documented
    * honesty convention). */
-  parseSessionTotals(
+  parseSessionTotals: (
     harness: HarnessId,
-    sessionPath: string,
-  ): Promise<SessionTotalsLike | undefined>;
-  /** Test seam — defaults to `() => new Date()`. */
-  now?: () => Date;
+    sessionPath: string
+  ) => Promise<SessionTotalsLike | undefined>;
+  runSetup: (
+    ws: Workspace,
+    setup: string[],
+    timeoutMs: number
+  ) => Promise<SetupResult>;
+  /** Runs the task's `verify` command (a shell command line, same as each
+   * `setup[]` entry) via proc.ts's spawnDetached, through `/bin/sh -c`. */
+  runVerify: (
+    verifyCmd: string,
+    cwd: string,
+    timeoutMs: number
+  ) => Promise<{ exitCode: number | null; timedOut: boolean }>;
 }
 
 async function buildSessionRef(
   harness: HarnessId,
-  sessionPath: string,
+  sessionPath: string
 ): Promise<SessionRef> {
   const st = await stat(sessionPath);
-  const id = path.basename(sessionPath).replace(/\.jsonl$/, "");
+  const id = path.basename(sessionPath).replace(JSONL_EXTENSION_RE, "");
   return {
     harness,
     id,
+    kind: "main",
+    mtime: st.mtime,
     path: sessionPath,
     sizeBytes: st.size,
-    mtime: st.mtime,
-    kind: "main",
   };
 }
 
 async function parseSessionTotalsReal(
   harness: HarnessId,
-  sessionPath: string,
+  sessionPath: string
 ): Promise<SessionTotalsLike | undefined> {
   try {
     const ref = await buildSessionRef(harness, sessionPath);
@@ -121,23 +123,23 @@ async function parseSessionTotalsReal(
     const priced = priceSession(session, { mode: "auto" });
     const totals = sessionTotals(priced);
     const compactionCount = priced.events.filter(
-      (e) => e.kind === "compaction",
+      (e) => e.kind === "compaction"
     ).length;
     return {
-      tokens: totals.tokens,
+      compactionCount,
       cost: totals.cost,
       priced: totals.priced,
-      compactionCount,
+      tokens: totals.tokens,
     };
   } catch {
-    return undefined;
+    // Missing or malformed transcripts are reported as unavailable totals.
   }
 }
 
 async function runVerifyReal(
   verifyCmd: string,
   cwd: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<{ exitCode: number | null; timedOut: boolean }> {
   const result = await spawnDetached("/bin/sh", ["-c", verifyCmd], {
     cwd,
@@ -148,20 +150,20 @@ async function runVerifyReal(
 
 async function applyConfigReal_(
   variantDir: string | "current",
-  workspaceDir: string,
+  workspaceDir: string
 ): Promise<{ model?: string }> {
   const applied = await applyConfigReal(variantDir, workspaceDir);
-  return applied.model !== undefined ? { model: applied.model } : {};
+  return applied.model === undefined ? {} : { model: applied.model };
 }
 
 export function defaultOrchestrateDeps(): OrchestrateDeps {
   return {
+    applyConfig: applyConfigReal_,
     createWorkspace: createWorkspaceReal,
     destroyWorkspace: destroyWorkspaceReal,
-    runSetup: runSetupReal,
-    applyConfig: applyConfigReal_,
-    runVerify: runVerifyReal,
     parseSessionTotals: parseSessionTotalsReal,
+    runSetup: runSetupReal,
+    runVerify: runVerifyReal,
   };
 }
 
@@ -193,7 +195,7 @@ export type ProgressEvent =
 export function estimateRuns(
   taskCount: number,
   trials: number,
-  configCount: number,
+  configCount: number
 ): number {
   return taskCount * trials * configCount;
 }
@@ -204,7 +206,7 @@ export function estimateRuns(
 export function formatEstimateLine(
   taskCount: number,
   trials: number,
-  configCount: number,
+  configCount: number
 ): string {
   const total = estimateRuns(taskCount, trials, configCount);
   const plural = (n: number, word: string) =>
@@ -217,34 +219,34 @@ export function formatEstimateLine(
 // ---------------------------------------------------------------------------
 
 export interface OrchestrateOptions {
-  suite: readonly BenchTask[];
   configs: readonly ConfigVariant[]; // typically [configA, configB]
-  harness: HarnessId;
-  runner: BenchRunner;
-  repoDir: string; // target repo root (peek bench run's cwd, typically)
-  scratchRoot?: string; // default: defaultScratchRoot()
-  trials: number; // per task per config
-  /** CLI `--timeout` override — applied to every task when set; otherwise
-   * each BenchTask's own `timeoutS` is used, falling back to
-   * DEFAULT_TASK_TIMEOUT_S if neither is set. */
-  timeoutS?: number;
-  perTrialBudgetUsd?: number;
-  /** Cross-trial ceiling (spec: "best-effort, from completed trials'
-   * logs") — checked BEFORE starting each trial against the running sum of
-   * completed trials' totals.cost (priced trials only, this run only). */
-  maxCostUsd?: number;
-  resultsWriter: ResultsWriter;
   /** Partial override of the real pipeline (defaultOrchestrateDeps()) —
    * tests substitute a mock runner + mock proc/workspace here; production
    * callers normally omit this entirely. */
   deps?: Partial<OrchestrateDeps>;
+  harness: HarnessId;
+  /** Cross-trial ceiling (spec: "best-effort, from completed trials'
+   * logs") — checked BEFORE starting each trial against the running sum of
+   * completed trials' totals.cost (priced trials only, this run only). */
+  maxCostUsd?: number;
   onProgress?: (event: ProgressEvent) => void;
+  perTrialBudgetUsd?: number;
+  repoDir: string; // target repo root (peek bench run's cwd, typically)
+  resultsWriter: ResultsWriter;
+  runner: BenchRunner;
+  scratchRoot?: string; // default: defaultScratchRoot()
+  suite: readonly BenchTask[];
+  /** CLI `--timeout` override — applied to every task when set; otherwise
+   * each BenchTask's own `timeoutS` is used, falling back to
+   * DEFAULT_TASK_TIMEOUT_S if neither is set. */
+  timeoutS?: number;
+  trials: number; // per task per config
 }
 
 export interface OrchestrateResult {
-  results: TrialResult[];
   aborted: boolean;
   abortReason?: string;
+  results: TrialResult[];
 }
 
 function effectiveTimeoutS(task: BenchTask, override?: number): number {
@@ -258,7 +260,7 @@ let workspaceIdCounter = 0;
 function workspaceId(
   taskName: string,
   configName: string,
-  trialIndex: number,
+  trialIndex: number
 ): string {
   const slug = (s: string) =>
     s
@@ -292,7 +294,7 @@ async function runOneTrial(
   scratchRoot: string,
   timeoutOverride: number | undefined,
   perTrialBudgetUsd: number | undefined,
-  deps: OrchestrateDeps,
+  deps: OrchestrateDeps
 ): Promise<TrialResult> {
   const startedAt = (deps.now ?? (() => new Date()))();
   const timeoutS = effectiveTimeoutS(task, timeoutOverride);
@@ -307,26 +309,26 @@ async function runOneTrial(
     const setupResult = await deps.runSetup(ws, task.setup ?? [], timeoutMs);
     if (!setupResult.ok) {
       return {
-        taskName: task.name,
         configName: config.name,
-        harness,
-        trialIndex,
         exitCode: setupResult.exitCode ?? null,
-        timedOut: false,
-        wallMs: 0,
-        stderrTail: setupResult.stderrTail ?? "",
-        verify: { exitCode: null, passed: false },
+        harness,
         startedAt: startedAt.toISOString(),
+        stderrTail: setupResult.stderrTail ?? "",
+        taskName: task.name,
+        timedOut: false,
+        trialIndex,
+        verify: { exitCode: null, passed: false },
+        wallMs: 0,
       };
     }
 
     const trialSpec: TrialSpec = {
-      task,
       configName: config.name,
-      workspaceDir: ws.dir,
+      task,
       timeoutS,
-      ...(model !== undefined ? { model } : {}),
-      ...(perTrialBudgetUsd !== undefined ? { perTrialBudgetUsd } : {}),
+      workspaceDir: ws.dir,
+      ...(model === undefined ? {} : { model }),
+      ...(perTrialBudgetUsd === undefined ? {} : { perTrialBudgetUsd }),
     };
     const outcome = await runner.run(trialSpec);
 
@@ -334,20 +336,22 @@ async function runOneTrial(
     const verifyPassed = verifyResult.exitCode === 0 && !verifyResult.timedOut;
 
     const totals =
-      outcome.sessionPath !== undefined
-        ? await deps.parseSessionTotals(harness, outcome.sessionPath)
-        : undefined;
+      outcome.sessionPath === undefined
+        ? undefined
+        : await deps.parseSessionTotals(harness, outcome.sessionPath);
 
     const result: TrialResult = {
       ...outcome,
-      taskName: task.name,
       configName: config.name,
       harness,
+      startedAt: startedAt.toISOString(),
+      taskName: task.name,
       trialIndex,
       verify: { exitCode: verifyResult.exitCode, passed: verifyPassed },
-      startedAt: startedAt.toISOString(),
     };
-    if (totals !== undefined) result.totals = totals;
+    if (totals !== undefined) {
+      result.totals = totals;
+    }
     return result;
   } finally {
     if (ws !== undefined) {
@@ -364,7 +368,7 @@ async function runOneTrial(
  * running priced spend from this run's own completed trials reaches it.
  */
 export async function orchestrate(
-  options: OrchestrateOptions,
+  options: OrchestrateOptions
 ): Promise<OrchestrateResult> {
   const {
     suite,
@@ -391,21 +395,22 @@ export async function orchestrate(
 
   for (const task of suite) {
     for (const config of configs) {
-      for (let trialIndex = 0; trialIndex < trials; trialIndex++) {
+      for (let trialIndex = 0; trialIndex < trials; trialIndex += 1) {
         if (maxCostUsd !== undefined && spentUsd >= maxCostUsd) {
           const reason = `--max-cost ${maxCostUsd} reached (spent so far: $${spentUsd.toFixed(2)})`;
           onProgress?.({ kind: "aborted", reason, spentUsd });
-          return { results, aborted: true, abortReason: reason };
+          return { aborted: true, abortReason: reason, results };
         }
 
         onProgress?.({
+          configName: config.name,
           kind: "trial-start",
           taskName: task.name,
-          configName: config.name,
           trialIndex,
           trialsTotal,
         });
 
+        // biome-ignore lint/performance/noAwaitInLoops: Trials are intentionally serialized to isolate transcripts.
         const result = await runOneTrial(
           task,
           config,
@@ -416,16 +421,18 @@ export async function orchestrate(
           scratchRoot,
           timeoutS,
           perTrialBudgetUsd,
-          deps,
+          deps
         );
         await resultsWriter.append(result);
         results.push(result);
-        if (result.totals?.priced) spentUsd += result.totals.cost;
+        if (result.totals?.priced) {
+          spentUsd += result.totals.cost;
+        }
 
         onProgress?.({ kind: "trial-end", result });
       }
     }
   }
 
-  return { results, aborted: false };
+  return { aborted: false, results };
 }

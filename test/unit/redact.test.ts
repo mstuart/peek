@@ -11,11 +11,14 @@ import {
 // Recursively replaces every leaf value with its JS type tag (or "array"),
 // so two structures can be compared for identical shape independent of content.
 function shapeOf(value: unknown): unknown {
-  if (Array.isArray(value)) return { __array__: value.map(shapeOf) };
+  if (Array.isArray(value)) {
+    return { __array__: value.map(shapeOf) };
+  }
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>))
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       out[k] = shapeOf(v);
+    }
     return out;
   }
   return value === null ? "null" : typeof value;
@@ -30,47 +33,47 @@ const COMPACTION_TEXT =
 function buildSample() {
   return {
     recordA: {
-      type: "assistant",
-      uuid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-      sessionId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-      timestamp: "2026-08-08T15:13:23.000Z",
       cwd: "/Users/mark/git/peek",
       gitBranch: "main",
       message: {
-        role: "assistant",
-        model: "claude-sonnet-5",
         content: [
           {
-            type: "tool_use",
             id: SHARED_TOOL_ID,
-            name: "Bash",
             input: { command: LONG_TEXT },
+            name: "Bash",
+            type: "tool_use",
           },
-          { type: "text", text: COMPACTION_TEXT },
+          { text: COMPACTION_TEXT, type: "text" },
         ],
+        model: "claude-sonnet-5",
+        role: "assistant",
         usage: {
-          input_tokens: 12345,
           cache_read_input_tokens: 6789,
+          input_tokens: 12_345,
           output_tokens: 42,
         },
       },
+      sessionId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      timestamp: "2026-08-08T15:13:23.000Z",
+      type: "assistant",
+      uuid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     },
     recordB: {
-      type: "user",
-      uuid: "11111111-2222-3333-4444-555555555555",
-      timestamp: "2026-08-08T15:13:24.000Z",
-      toolUseResult: { stdout: LONG_TEXT, stderr: "", interrupted: false },
       message: {
-        role: "user",
         content: [
           {
-            type: "tool_result",
-            tool_use_id: SHARED_TOOL_ID,
             content: LONG_TEXT,
             is_error: false,
+            tool_use_id: SHARED_TOOL_ID,
+            type: "tool_result",
           },
         ],
+        role: "user",
       },
+      timestamp: "2026-08-08T15:13:24.000Z",
+      toolUseResult: { interrupted: false, stderr: "", stdout: LONG_TEXT },
+      type: "user",
+      uuid: "11111111-2222-3333-4444-555555555555",
     },
   };
 }
@@ -83,7 +86,7 @@ describe("redactRecord", () => {
 
     expect(shapeOf(redacted)).toEqual(shapeOf(sample));
     expect(redacted.recordA.message.usage).toEqual(
-      sample.recordA.message.usage,
+      sample.recordA.message.usage
     );
   });
 
@@ -147,7 +150,7 @@ describe("redactRecord", () => {
     const redacted = redactRecord(buildSample(), ctx) as ReturnType<
       typeof buildSample
     >;
-    const text = (redacted.recordA.message.content[1] as { text: string }).text;
+    const { text } = redacted.recordA.message.content[1] as { text: string };
 
     expect(text.startsWith("This session is being continued")).toBe(true);
     expect(text.length).toBe(COMPACTION_TEXT.length);
@@ -204,16 +207,16 @@ describe("redactRecord", () => {
 
   it("recurses into Codex-shaped JSON-string function_call.arguments", () => {
     const record = {
-      timestamp: "2026-08-08T15:13:23.000Z",
-      type: "response_item",
       payload: {
-        type: "function_call",
-        name: "shell",
         arguments: JSON.stringify({
           command: LONG_TEXT,
           cwd: "/Users/mark/git/peek",
         }),
+        name: "shell",
+        type: "function_call",
       },
+      timestamp: "2026-08-08T15:13:23.000Z",
+      type: "response_item",
     };
     const ctx = createRedactContext();
     const redacted = redactRecord(record, ctx) as typeof record;
@@ -243,7 +246,7 @@ describe("redactRecord", () => {
     expect(redacted.text.includes("<INSTRUCTIONS>")).toBe(true);
     expect(redacted.text.includes("</INSTRUCTIONS>")).toBe(true);
     expect(redacted.text.indexOf("<INSTRUCTIONS>")).toBeLessThan(
-      redacted.text.indexOf("</INSTRUCTIONS>"),
+      redacted.text.indexOf("</INSTRUCTIONS>")
     );
     // Content between the tags is scrambled, not the original file contents.
     expect(redacted.text.includes(agentsFileContents)).toBe(false);
@@ -282,10 +285,10 @@ describe("redactRecord", () => {
 
   it("preserves function_call.name (tool-call context) but scrambles a standalone name field", () => {
     const record = {
-      type: "function_call",
-      name: "exec_command",
-      call_id: "call_abc123",
       arguments: JSON.stringify({ command: "cat a.txt" }),
+      call_id: "call_abc123",
+      name: "exec_command",
+      type: "function_call",
     };
     const standalone = { name: "John Smith" };
     const ctx = createRedactContext();
@@ -293,7 +296,7 @@ describe("redactRecord", () => {
     const redactedCall = redactRecord(record, ctx) as typeof record;
     const redactedStandalone = redactRecord(
       standalone,
-      ctx,
+      ctx
     ) as typeof standalone;
 
     expect(redactedCall.name).toBe("exec_command");
@@ -302,9 +305,9 @@ describe("redactRecord", () => {
 
   it("preserves input_schema-adjacent tool-spec name fields", () => {
     const toolSpec = {
-      name: "read_file",
       description: "Reads a file from disk",
-      input_schema: { type: "object", properties: {} },
+      input_schema: { properties: {}, type: "object" },
+      name: "read_file",
     };
     const ctx = createRedactContext();
     const redacted = redactRecord(toolSpec, ctx) as typeof toolSpec;
@@ -314,21 +317,21 @@ describe("redactRecord", () => {
 
   it("is deterministic across separate redaction runs for tag-preserving and tool-name fixes", () => {
     const record = {
-      text: "# AGENTS.md instructions for /Users/mark/git/peek\n\n<INSTRUCTIONS>\nAlways write tests before code. Keep functions small and focused on one job.\n</INSTRUCTIONS>",
       call: {
-        name: "exec_command",
-        call_id: "call_xyz789",
         arguments: JSON.stringify({ cmd: "ls" }),
+        call_id: "call_xyz789",
+        name: "exec_command",
       },
+      text: "# AGENTS.md instructions for /Users/mark/git/peek\n\n<INSTRUCTIONS>\nAlways write tests before code. Keep functions small and focused on one job.\n</INSTRUCTIONS>",
     };
 
     const redactedFirst = redactRecord(
       record,
-      createRedactContext(),
+      createRedactContext()
     ) as typeof record;
     const redactedSecond = redactRecord(
       record,
-      createRedactContext(),
+      createRedactContext()
     ) as typeof record;
 
     expect(redactedFirst).toEqual(redactedSecond);
@@ -339,11 +342,11 @@ describe("redactRecord", () => {
   // longer guarantees passthrough — the value must also be enum-shaped.
   it("scrambles allowlisted-key values that carry free text instead of an enum (Gap 1 probe)", () => {
     const record = {
-      tool_result: {
-        status: "Blocked pending review from mark@company.com re: acquisition",
-      },
       other: {
         source: "reported by mark stuart via internal ticket",
+      },
+      tool_result: {
+        status: "Blocked pending review from mark@company.com re: acquisition",
       },
     };
     const ctx = createRedactContext();
@@ -352,7 +355,7 @@ describe("redactRecord", () => {
     expect(redacted.tool_result.status).not.toBe(record.tool_result.status);
     expect(redacted.tool_result.status).not.toContain("mark@company.com");
     expect(redacted.tool_result.status.length).toBe(
-      record.tool_result.status.length,
+      record.tool_result.status.length
     );
     expect(redacted.other.source).not.toBe(record.other.source);
     expect(redacted.other.source).not.toContain("mark stuart");
@@ -363,8 +366,8 @@ describe("redactRecord", () => {
   it("remaps Codex's flattened branch field instead of threshold-passing it (Gap 3 probe)", () => {
     const record = {
       payload: {
-        commit_hash: "abc1234",
         branch: "mstuart",
+        commit_hash: "abc1234",
         repository_url: "https://github.com/example/x.git",
       },
     };
@@ -374,7 +377,7 @@ describe("redactRecord", () => {
     expect(redacted.payload.branch).not.toBe("mstuart");
     expect(redacted.payload.branch.length).toBe("mstuart".length);
     expect(redacted.payload.repository_url).not.toBe(
-      record.payload.repository_url,
+      record.payload.repository_url
     );
 
     // Same value, same fake output wherever `branch` appears.
@@ -388,10 +391,10 @@ describe("redactRecord", () => {
   // (no spaces/symbols) — legitimate short enum values must still survive.
   it("still passes through short, space-free enum values (Gap 2 tightened, legitimate enums preserved)", () => {
     const record = {
-      role: "user",
-      type: "function_call",
       model_provider: "openai",
+      role: "user",
       status: "managed",
+      type: "function_call",
     };
     const ctx = createRedactContext();
     const redacted = redactRecord(record, ctx) as typeof record;
@@ -424,7 +427,7 @@ describe("real-capture fixtures stay stable under the tightened allowlist rules"
     value: unknown,
     key: string | undefined,
     path: string,
-    out: Record<string, string>,
+    out: Record<string, string>
   ): void {
     if (value === null || typeof value !== "object") {
       if (
@@ -437,7 +440,9 @@ describe("real-capture fixtures stay stable under the tightened allowlist rules"
       return;
     }
     if (Array.isArray(value)) {
-      value.forEach((v, i) => collectAllowlisted(v, key, `${path}[${i}]`, out));
+      value.forEach((item, index) => {
+        collectAllowlisted(item, key, `${path}[${index}]`, out);
+      });
       return;
     }
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {

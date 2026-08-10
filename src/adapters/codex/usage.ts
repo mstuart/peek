@@ -13,7 +13,9 @@ import { contextTotal, normalizeCodexUsage } from "../../model/normalize.js";
 import type { NormalizedUsage, ParseWarning, Turn } from "../../model/types.js";
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -70,11 +72,12 @@ export function createCodexUsageState(): CodexUsageState {
  * "not yet carrying usage" (not "is the last turn") is the right test.
  */
 function findAttachTarget(turns: Turn[]): number | undefined {
-  for (let i = turns.length - 1; i >= 0; i--) {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
-    if (turn && turn.role === "assistant" && turn.contextTotal === 0) return i;
+    if (turn && turn.role === "assistant" && turn.contextTotal === 0) {
+      return i;
+    }
   }
-  return undefined;
 }
 
 /**
@@ -89,7 +92,7 @@ export function handleEventMsg(
   turns: Turn[],
   state: CodexUsageState,
   warnings: ParseWarning[],
-  line: number,
+  line: number
 ): void {
   const type = prop(payload, "type");
   const typeStr = typeof type === "string" ? type : undefined;
@@ -111,10 +114,10 @@ export function handleEventMsg(
 
   warnings.push({
     code: "unknown-event-msg",
+    line,
     message: `line ${line}: unrecognized event_msg payload.type ${
       typeStr ? `"${typeStr}"` : "(missing)"
     }`,
-    line,
     recordType: "event_msg",
   });
 }
@@ -139,7 +142,7 @@ function attachTokenCount(
   turns: Turn[],
   state: CodexUsageState,
   warnings: ParseWarning[],
-  line: number,
+  line: number
 ): void {
   const info = prop(payload, "info");
   const lastTokenUsage = prop(info, "last_token_usage");
@@ -154,8 +157,8 @@ function attachTokenCount(
   if (targetIndex === undefined) {
     warnings.push({
       code: "orphan-token-count",
-      message: `line ${line}: token_count has no unattached assistant turn to attach to`,
       line,
+      message: `line ${line}: token_count has no unattached assistant turn to attach to`,
       recordType: "event_msg",
     });
     return;
@@ -166,11 +169,13 @@ function attachTokenCount(
     raw: info,
   };
   const target = turns[targetIndex];
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   turns[targetIndex] = {
     ...target,
-    usage: normalized,
     contextTotal: contextTotal(normalized),
+    usage: normalized,
   };
 }
 
@@ -193,13 +198,17 @@ const CROSS_CHECK_TOLERANCE = 0.01; // 1%
 export function checkCumulativeCrossCheck(
   turns: readonly Turn[],
   state: CodexUsageState,
-  warnings: ParseWarning[],
+  warnings: ParseWarning[]
 ): void {
-  if (!state.sawTokenCount || state.lastCumulativeTotalTokens === null) return;
+  if (!state.sawTokenCount || state.lastCumulativeTotalTokens === null) {
+    return;
+  }
 
   let sum = 0;
   for (const turn of turns) {
-    if (turn.contextTotal === 0) continue;
+    if (turn.contextTotal === 0) {
+      continue;
+    }
     sum += turn.contextTotal + turn.usage.output;
   }
 

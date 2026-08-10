@@ -19,7 +19,7 @@ import type {
   Session,
   Turn,
 } from "../model/types.js";
-import { type ModelPrice, lookupModelPrice } from "../pricing/lookup.js";
+import { lookupModelPrice, type ModelPrice } from "../pricing/lookup.js";
 import {
   loadCachedModelsDevSnapshot,
   lookupWithFallback,
@@ -37,14 +37,14 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function zeroCost(mode: CostBreakdown["mode"], priced: boolean): CostBreakdown {
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: 0,
+    cacheWrite5m: 0,
+    input: 0,
     mode,
+    output: 0,
     priced,
+    total: 0,
   };
 }
 
@@ -56,25 +56,28 @@ function zeroCost(mode: CostBreakdown["mode"], priced: boolean): CostBreakdown {
  */
 function claudeDisplayCost(
   turn: Turn,
-  mode: CostBreakdown["mode"],
+  mode: CostBreakdown["mode"]
 ): CostBreakdown | undefined {
   const raw = asRecord(turn.usage.raw);
   const costUSD = raw?.costUSD;
-  if (typeof costUSD !== "number" || !Number.isFinite(costUSD))
-    return undefined;
+  if (typeof costUSD !== "number" || !Number.isFinite(costUSD)) {
+    return;
+  }
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: costUSD,
+    cacheWrite5m: 0,
+    input: 0,
     mode,
+    output: 0,
     priced: true,
+    total: costUSD,
   };
 }
 
 const PROVIDER_PREFIX_RE = /^[a-z0-9_.]+\//i;
+const CLAUDE_MODEL_RE = /^claude/i;
+const OPENAI_MODEL_RE = /^(gpt|o|codex)/i;
 
 export type ProviderTieringFamily = "marginal" | "wholeRequest" | "none";
 
@@ -86,15 +89,19 @@ export type ProviderTieringFamily = "marginal" | "wholeRequest" | "none";
  */
 export function inferProviderFamily(modelId: string): ProviderTieringFamily {
   const bare = modelId.replace(PROVIDER_PREFIX_RE, "");
-  if (/^claude/i.test(bare)) return "marginal";
-  if (/^(gpt|o|codex)/i.test(bare)) return "wholeRequest";
+  if (CLAUDE_MODEL_RE.test(bare)) {
+    return "marginal";
+  }
+  if (OPENAI_MODEL_RE.test(bare)) {
+    return "wholeRequest";
+  }
   return "none";
 }
 
 interface ComponentPricing {
-  tokens: number;
   baseRate: number;
   tierRate: number;
+  tokens: number;
 }
 
 /**
@@ -107,14 +114,14 @@ interface ComponentPricing {
  */
 function splitMarginal(
   components: readonly ComponentPricing[],
-  thresholdTokens: number,
+  thresholdTokens: number
 ): number[] {
   let offset = 0;
   const costs: number[] = [];
   for (const c of components) {
     const belowTokens = Math.max(
       0,
-      Math.min(c.tokens, thresholdTokens - offset),
+      Math.min(c.tokens, thresholdTokens - offset)
     );
     const aboveTokens = c.tokens - belowTokens;
     costs.push(belowTokens * c.baseRate + aboveTokens * c.tierRate);
@@ -146,10 +153,11 @@ function splitMarginal(
  *     rate once the request's context crossed 200k, so output bills entirely at the tier rate
  *     (or base, if absent) rather than being split.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Pricing branches mirror the distinct documented provider tiering rules.
 export function calculateCost(
   turn: Pick<Turn, "usage" | "contextTotal" | "model">,
   price: ModelPrice,
-  mode: CostBreakdown["mode"],
+  mode: CostBreakdown["mode"]
 ): CostBreakdown {
   const usage: NormalizedUsage = turn.usage;
   const base5m = price.cacheCreation5m ?? price.input * 1.25;
@@ -157,11 +165,8 @@ export function calculateCost(
   const baseCacheRead = price.cacheRead ?? 0;
 
   const family = price.tiering ? inferProviderFamily(turn.model) : "none";
-  const threshold = price.tiering?.thresholdTokens;
   const overThreshold =
-    price.tiering !== null &&
-    threshold !== undefined &&
-    turn.contextTotal > threshold;
+    price.tiering !== null && turn.contextTotal > price.tiering.thresholdTokens;
 
   let input: number;
   let output: number;
@@ -176,37 +181,32 @@ export function calculateCost(
     cacheRead = usage.cacheRead * (t.cacheRead ?? baseCacheRead);
     cacheWrite5m = usage.cacheWrite5m * (t.cacheCreation5m ?? base5m);
     cacheWrite1h = usage.cacheWrite1h * (t.cacheCreation1h ?? base1h);
-  } else if (
-    family === "marginal" &&
-    overThreshold &&
-    price.tiering &&
-    threshold !== undefined
-  ) {
+  } else if (family === "marginal" && overThreshold && price.tiering) {
     const t = price.tiering;
     const [inputCost, cacheReadCost, cache5mCost, cache1hCost] = splitMarginal(
       [
         {
-          tokens: usage.inputUncached,
           baseRate: price.input,
           tierRate: t.input ?? price.input,
+          tokens: usage.inputUncached,
         },
         {
-          tokens: usage.cacheRead,
           baseRate: baseCacheRead,
           tierRate: t.cacheRead ?? baseCacheRead,
+          tokens: usage.cacheRead,
         },
         {
-          tokens: usage.cacheWrite5m,
           baseRate: base5m,
           tierRate: t.cacheCreation5m ?? base5m,
+          tokens: usage.cacheWrite5m,
         },
         {
-          tokens: usage.cacheWrite1h,
           baseRate: base1h,
           tierRate: t.cacheCreation1h ?? base1h,
+          tokens: usage.cacheWrite1h,
         },
       ],
-      threshold,
+      t.thresholdTokens
     );
     input = inputCost ?? 0;
     cacheRead = cacheReadCost ?? 0;
@@ -230,25 +230,27 @@ export function calculateCost(
   // null/NaN cost. Degrade to an explicit unpriced zero instead, exactly like an unresolvable
   // model id does via zeroCost() in priceTurn below.
   if (
-    !Number.isFinite(input) ||
-    !Number.isFinite(output) ||
-    !Number.isFinite(cacheRead) ||
-    !Number.isFinite(cacheWrite5m) ||
-    !Number.isFinite(cacheWrite1h) ||
-    !Number.isFinite(total)
+    !(
+      Number.isFinite(input) &&
+      Number.isFinite(output) &&
+      Number.isFinite(cacheRead) &&
+      Number.isFinite(cacheWrite5m) &&
+      Number.isFinite(cacheWrite1h) &&
+      Number.isFinite(total)
+    )
   ) {
     return zeroCost(mode, false);
   }
 
   return {
-    input,
-    output,
     cacheRead,
-    cacheWrite5m,
     cacheWrite1h,
-    total,
+    cacheWrite5m,
+    input,
     mode,
+    output,
     priced: true,
+    total,
   };
 }
 
@@ -281,13 +283,19 @@ export function priceTurn(turn: Turn, opts: AccountingOptions): CostBreakdown {
       return turn.cost;
     }
     const claudeCost = claudeDisplayCost(turn, mode);
-    if (claudeCost) return claudeCost;
-    if (mode === "display") return zeroCost("display", false);
+    if (claudeCost) {
+      return claudeCost;
+    }
+    if (mode === "display") {
+      return zeroCost("display", false);
+    }
     // mode === "auto" with nothing precomputed: fall through to calculate below.
   }
 
   const price = resolveModelPrice(turn.model);
-  if (!price) return zeroCost(mode, false);
+  if (!price) {
+    return zeroCost(mode, false);
+  }
   return calculateCost(turn, price, mode);
 }
 
@@ -315,7 +323,7 @@ function resolveModelPrice(modelId: string): ModelPrice | null {
  */
 export function priceSession(
   session: Session,
-  opts: AccountingOptions,
+  opts: AccountingOptions
 ): Session {
   return {
     ...session,
@@ -327,14 +335,6 @@ export function priceSession(
 }
 
 export interface SessionTotals {
-  tokens: {
-    inputUncached: number;
-    cacheRead: number;
-    cacheWrite5m: number;
-    cacheWrite1h: number;
-    output: number;
-    contextTotal: number;
-  };
   cost: number;
   /**
    * false if ANY turn in the session is unpriced (CostBreakdown.priced === false). Deliberate
@@ -344,18 +344,26 @@ export interface SessionTotals {
    * "incomplete" indicator whenever priced is false, rather than presenting it as the total.
    */
   priced: boolean;
+  tokens: {
+    inputUncached: number;
+    cacheRead: number;
+    cacheWrite5m: number;
+    cacheWrite1h: number;
+    output: number;
+    contextTotal: number;
+  };
 }
 
 /** Rollup helper used by later list/cost commands (T3.1). Does not dedup or price — call
  * priceSession first if turns aren't already priced. */
 export function sessionTotals(session: Session): SessionTotals {
   const tokens = {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    output: 0,
+    cacheWrite5m: 0,
     contextTotal: 0,
+    inputUncached: 0,
+    output: 0,
   };
   let cost = 0;
   let priced = true;
@@ -368,8 +376,10 @@ export function sessionTotals(session: Session): SessionTotals {
     tokens.output += turn.usage.output;
     tokens.contextTotal += turn.contextTotal;
     cost += turn.cost.total;
-    if (!turn.cost.priced) priced = false;
+    if (!turn.cost.priced) {
+      priced = false;
+    }
   }
 
-  return { tokens, cost, priced };
+  return { cost, priced, tokens };
 }

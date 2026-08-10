@@ -34,6 +34,7 @@ import { priceSession, sessionTotals } from "../engine/accounting.js";
 import { finalizeCompactions } from "../engine/compaction.js";
 import { computeComposition } from "../engine/composition.js";
 import {
+  diffSessions,
   type SelectLastComparableOptions,
   type SelectLastComparableResult,
   type SessionDiff,
@@ -43,7 +44,6 @@ import {
   type SessionDiffCost,
   type SessionDiffMeta,
   type SessionDiffTotals,
-  diffSessions,
   selectLastComparable,
 } from "../engine/diff.js";
 import type {
@@ -57,11 +57,11 @@ import { formatNumber, renderTable } from "../render/table.js";
 import { RESIDUAL_LABEL } from "./context.js";
 import {
   type DiscoverAllOptions,
-  type ResolveOptions,
   discoverAll,
   formatCost,
   parseAndDedup,
   parseHarnessOption,
+  type ResolveOptions,
   resolveSessionRef,
 } from "./shared.js";
 
@@ -70,14 +70,14 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface DiffMetaColumn {
-  id: string;
+  durationLabel: string;
+  durationMs: number;
   harness: HarnessId;
   harnessVersion: string;
-  models: string[];
+  id: string;
   modelLabel: string;
+  models: string[];
   turns: number;
-  durationMs: number;
-  durationLabel: string;
 }
 
 export type DiffTokenClass =
@@ -88,38 +88,38 @@ export type DiffTokenClass =
   | "output";
 
 export interface DiffTotalsRow {
+  a: number;
+  aLabel: string;
+  b: number;
+  bLabel: string;
+  delta: number;
+  deltaLabel: string; // signed
+  pct: number | null;
+  pctLabel: string; // signed, or "—" when pct is null
   tokenClass: DiffTokenClass;
   tokenClassLabel: string;
-  a: number;
-  b: number;
-  delta: number;
-  pct: number | null;
-  aLabel: string;
-  bLabel: string;
-  deltaLabel: string; // signed
-  pctLabel: string; // signed, or "—" when pct is null
 }
 
 export interface DiffCostLine {
   a: number;
-  b: number;
-  delta: number;
-  pct: number | null;
-  bothPriced: boolean;
   aLabel: string; // "—" unless bothPriced (honesty convention)
+  b: number;
   bLabel: string;
+  bothPriced: boolean;
+  delta: number;
   deltaLabel: string;
+  pct: number | null;
   pctLabel: string;
 }
 
 export interface DiffCompositionRow {
+  a: number;
+  aLabel: string;
+  b: number;
+  bLabel: string;
   category: CompositionCategory | "residual";
   categoryLabel: string;
-  a: number;
-  b: number;
   delta: number;
-  aLabel: string;
-  bLabel: string;
   deltaLabel: string;
   /** Set only on the residual row (RESIDUAL_LABEL, verbatim per PLAN). */
   label?: string;
@@ -128,31 +128,31 @@ export interface DiffCompositionRow {
 export interface DiffCompactionsBlock {
   countA: number;
   countB: number;
-  shrinkTotalA: number | null;
-  shrinkTotalB: number | null;
   discardedEstA: number | null;
   discardedEstB: number | null;
-  shrinkTotalLabelA: string; // exact ("headline" number per PLAN), or "unknown"
-  shrinkTotalLabelB: string;
   discardedEstLabelA: string; // "~"-prefixed estimate, or "unknown"
   discardedEstLabelB: string;
+  shrinkTotalA: number | null;
+  shrinkTotalB: number | null;
+  shrinkTotalLabelA: string; // exact ("headline" number per PLAN), or "unknown"
+  shrinkTotalLabelB: string;
 }
 
 export interface DiffReport {
-  meta: { a: DiffMetaColumn; b: DiffMetaColumn };
+  compactions: DiffCompactionsBlock;
   /** Printed prominently at the TOP when non-empty — PLAN's "⚠ these
    * sessions diverge strongly on ..." requirement. */
   comparabilityWarnings: string[];
-  totals: DiffTotalsRow[];
-  cost: DiffCostLine;
   /** Non-zero categories only (a!==0 || b!==0), declaration order. */
   composition: DiffCompositionRow[];
-  /** Always present, regardless of whether it's zero. */
-  residual: DiffCompositionRow;
-  compactions: DiffCompactionsBlock;
   /** "model changed? version changed? systemPrompt same/differs/unknown"
    * (+ projectInstructions, same convention) — one line per config field. */
   config: string[];
+  cost: DiffCostLine;
+  meta: { a: DiffMetaColumn; b: DiffMetaColumn };
+  /** Always present, regardless of whether it's zero. */
+  residual: DiffCompositionRow;
+  totals: DiffTotalsRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -162,21 +162,27 @@ export interface DiffReport {
 /** "1234" -> "+1,234"; "-1234" -> "-1,234" (formatNumber already signs
  * negatives); "0" -> "0" (no bare "+0"). */
 function formatSigned(n: number): string {
-  if (n === 0) return "0";
+  if (n === 0) {
+    return "0";
+  }
   return n > 0 ? `+${formatNumber(n)}` : formatNumber(n);
 }
 
 /** Same signed convention as formatSigned, over a dollar amount via
  * shared.ts's formatCost (which already signs negatives). */
 function formatSignedCost(usd: number): string {
-  if (usd === 0) return formatCost(0);
+  if (usd === 0) {
+    return formatCost(0);
+  }
   return usd > 0 ? `+${formatCost(usd)}` : formatCost(usd);
 }
 
 /** null -> "—" (the same zero-guard TokenClassDelta.pct/SessionDiffCost.pct
  * document: "a percentage-of-zero has no honest value"). */
 function formatSignedPct(pct: number | null): string {
-  if (pct === null) return "—";
+  if (pct === null) {
+    return "—";
+  }
   const value = pct * 100;
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}%`;
@@ -190,8 +196,12 @@ function formatDuration(ms: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-  if (h > 0) return `${sign}${h}h${m}m`;
-  if (m > 0) return `${sign}${m}m${s}s`;
+  if (h > 0) {
+    return `${sign}${h}h${m}m`;
+  }
+  if (m > 0) {
+    return `${sign}${m}m${s}s`;
+  }
   return `${sign}${s}s`;
 }
 
@@ -208,14 +218,14 @@ function humanizeCategory(category: string): string {
 
 function buildMetaColumn(meta: SessionDiffMeta): DiffMetaColumn {
   return {
-    id: meta.id,
+    durationLabel: formatDuration(meta.durationMs),
+    durationMs: meta.durationMs,
     harness: meta.harness,
     harnessVersion: meta.harnessVersion,
-    models: meta.models,
+    id: meta.id,
     modelLabel: meta.models.join(" + "),
+    models: meta.models,
     turns: meta.turns,
-    durationMs: meta.durationMs,
-    durationLabel: formatDuration(meta.durationMs),
   };
 }
 
@@ -228,10 +238,10 @@ const TOKEN_CLASS_ORDER: readonly DiffTokenClass[] = [
 ];
 
 const TOKEN_CLASS_LABELS: Record<DiffTokenClass, string> = {
-  inputUncached: "input (uncached)",
   cacheRead: "cache read",
-  cacheWrite5m: "cache write (5m)",
   cacheWrite1h: "cache write (1h)",
+  cacheWrite5m: "cache write (5m)",
+  inputUncached: "input (uncached)",
   output: "output",
 };
 
@@ -239,16 +249,16 @@ function buildTotalsRows(totals: SessionDiffTotals): DiffTotalsRow[] {
   return TOKEN_CLASS_ORDER.map((tokenClass) => {
     const d = totals[tokenClass];
     return {
+      a: d.a,
+      aLabel: formatNumber(d.a),
+      b: d.b,
+      bLabel: formatNumber(d.b),
+      delta: d.delta,
+      deltaLabel: formatSigned(d.delta),
+      pct: d.pct,
+      pctLabel: formatSignedPct(d.pct),
       tokenClass,
       tokenClassLabel: TOKEN_CLASS_LABELS[tokenClass],
-      a: d.a,
-      b: d.b,
-      delta: d.delta,
-      pct: d.pct,
-      aLabel: formatNumber(d.a),
-      bLabel: formatNumber(d.b),
-      deltaLabel: formatSigned(d.delta),
-      pctLabel: formatSignedPct(d.pct),
     };
   });
 }
@@ -257,25 +267,25 @@ function buildCostLine(cost: SessionDiffCost): DiffCostLine {
   if (!cost.bothPriced) {
     return {
       a: cost.a,
-      b: cost.b,
-      delta: cost.delta,
-      pct: cost.pct,
-      bothPriced: false,
       aLabel: "—",
+      b: cost.b,
       bLabel: "—",
+      bothPriced: false,
+      delta: cost.delta,
       deltaLabel: "—",
+      pct: cost.pct,
       pctLabel: "—",
     };
   }
   return {
     a: cost.a,
-    b: cost.b,
-    delta: cost.delta,
-    pct: cost.pct,
-    bothPriced: true,
     aLabel: formatCost(cost.a),
+    b: cost.b,
     bLabel: formatCost(cost.b),
+    bothPriced: true,
+    delta: cost.delta,
     deltaLabel: formatSignedCost(cost.delta),
+    pct: cost.pct,
     pctLabel: formatSignedPct(cost.pct),
   };
 }
@@ -303,34 +313,36 @@ function buildCompositionRows(composition: SessionDiffComposition): {
   const rows: DiffCompositionRow[] = [];
   for (const category of COMPOSITION_CATEGORY_ORDER) {
     const cmp = composition.categories[category];
-    if (cmp.a === 0 && cmp.b === 0) continue;
+    if (cmp.a === 0 && cmp.b === 0) {
+      continue;
+    }
     rows.push({
+      a: cmp.a,
+      aLabel: `~${formatNumber(cmp.a)}`,
+      b: cmp.b,
+      bLabel: `~${formatNumber(cmp.b)}`,
       category,
       categoryLabel: humanizeCategory(category),
-      a: cmp.a,
-      b: cmp.b,
       delta: cmp.delta,
-      aLabel: `~${formatNumber(cmp.a)}`,
-      bLabel: `~${formatNumber(cmp.b)}`,
       deltaLabel: formatSigned(cmp.delta),
     });
   }
 
   const residual: DiffCompositionRow = {
-    category: "residual",
-    categoryLabel: "residual",
     a: composition.residual.a,
-    b: composition.residual.b,
-    delta: composition.residual.delta,
     // Unprefixed, like ContextResidualRow.tokensLabel — exact total minus Σ
     // estimates, not itself a char/4 read (commands/context.ts convention).
     aLabel: formatNumber(composition.residual.a),
+    b: composition.residual.b,
     bLabel: formatNumber(composition.residual.b),
+    category: "residual",
+    categoryLabel: "residual",
+    delta: composition.residual.delta,
     deltaLabel: formatSigned(composition.residual.delta),
     label: RESIDUAL_LABEL,
   };
 
-  return { rows, residual };
+  return { residual, rows };
 }
 
 function exactOrUnknown(value: number | null): string {
@@ -342,26 +354,26 @@ function estOrUnknown(value: number | null): string {
 }
 
 function buildCompactionsBlock(
-  compactions: SessionDiffCompactions,
+  compactions: SessionDiffCompactions
 ): DiffCompactionsBlock {
   return {
     countA: compactions.countA,
     countB: compactions.countB,
-    shrinkTotalA: compactions.shrinkTotalA,
-    shrinkTotalB: compactions.shrinkTotalB,
     discardedEstA: compactions.discardedEstA,
     discardedEstB: compactions.discardedEstB,
-    shrinkTotalLabelA: exactOrUnknown(compactions.shrinkTotalA),
-    shrinkTotalLabelB: exactOrUnknown(compactions.shrinkTotalB),
     discardedEstLabelA: estOrUnknown(compactions.discardedEstA),
     discardedEstLabelB: estOrUnknown(compactions.discardedEstB),
+    shrinkTotalA: compactions.shrinkTotalA,
+    shrinkTotalB: compactions.shrinkTotalB,
+    shrinkTotalLabelA: exactOrUnknown(compactions.shrinkTotalA),
+    shrinkTotalLabelB: exactOrUnknown(compactions.shrinkTotalB),
   };
 }
 
 function buildConfigLines(
   config: SessionDiffConfig,
   metaA: SessionDiffMeta,
-  metaB: SessionDiffMeta,
+  metaB: SessionDiffMeta
 ): string[] {
   return [
     config.modelChanged
@@ -381,17 +393,17 @@ function buildConfigLines(
  */
 export function buildDiffReport(diff: SessionDiff): DiffReport {
   const { rows: composition, residual } = buildCompositionRows(
-    diff.composition,
+    diff.composition
   );
   return {
-    meta: { a: buildMetaColumn(diff.meta.a), b: buildMetaColumn(diff.meta.b) },
-    comparabilityWarnings: [...diff.comparability.warnings],
-    totals: buildTotalsRows(diff.totals),
-    cost: buildCostLine(diff.cost),
-    composition,
-    residual,
     compactions: buildCompactionsBlock(diff.compactions),
+    comparabilityWarnings: [...diff.comparability.warnings],
+    composition,
     config: buildConfigLines(diff.config, diff.meta.a, diff.meta.b),
+    cost: buildCostLine(diff.cost),
+    meta: { a: buildMetaColumn(diff.meta.a), b: buildMetaColumn(diff.meta.b) },
+    residual,
+    totals: buildTotalsRows(diff.totals),
   };
 }
 
@@ -405,8 +417,8 @@ export function buildDiffReport(diff: SessionDiff): DiffReport {
 // ---------------------------------------------------------------------------
 
 export interface DiffLastNColumn {
-  id: string;
   harness: HarnessId;
+  id: string;
   modelLabel: string;
 }
 
@@ -416,31 +428,33 @@ export interface DiffLastNColumn {
  * comparable (unpriced cost, a compaction shrink total that isn't fully
  * known) — same honesty convention as DiffReport's own fields. */
 export interface DiffLastNRow {
-  label: string;
   baseLabel: string;
   deltaLabels: string[];
+  label: string;
 }
 
 export interface DiffLastNReport {
   base: DiffLastNColumn;
-  others: DiffLastNColumn[];
   /** Per-other-session comparability warnings (base vs that session) — one
    * diffSessions() `comparability.warnings` list per entry in `others`,
    * index-aligned. Empty array = no warnings for that pair. */
   comparabilityWarnings: string[][];
+  others: DiffLastNColumn[];
   rows: DiffLastNRow[];
 }
 
 /** Same signed convention as formatSigned, applied to a millisecond delta
  * via formatDuration (which already renders an unsigned magnitude). */
 function formatSignedDuration(deltaMs: number): string {
-  if (deltaMs === 0) return "0s";
+  if (deltaMs === 0) {
+    return "0s";
+  }
   const label = formatDuration(Math.abs(deltaMs));
   return deltaMs > 0 ? `+${label}` : `-${label}`;
 }
 
 export function buildDiffLastNReport(sessions: Session[]): DiffLastNReport {
-  const base = sessions[0];
+  const [base] = sessions;
   if (!base || sessions.length < 2) {
     throw new Error("buildDiffLastNReport requires at least 2 sessions");
   }
@@ -449,15 +463,15 @@ export function buildDiffLastNReport(sessions: Session[]): DiffLastNReport {
   const baseTotals = sessionTotals(base);
 
   const baseColumn: DiffLastNColumn = {
-    id: base.id,
     harness: base.harness,
+    id: base.id,
     modelLabel: (diffs[0]?.meta.a.models ?? [base.configSnapshot.model]).join(
-      " + ",
+      " + "
     ),
   };
   const others: DiffLastNColumn[] = diffs.map((d) => ({
-    id: d.meta.b.id,
     harness: d.meta.b.harness,
+    id: d.meta.b.id,
     modelLabel: d.meta.b.models.join(" + "),
   }));
   const comparabilityWarnings = diffs.map((d) => [...d.comparability.warnings]);
@@ -465,57 +479,57 @@ export function buildDiffLastNReport(sessions: Session[]): DiffLastNReport {
   const rows: DiffLastNRow[] = [];
 
   rows.push({
-    label: "turns",
     baseLabel: formatNumber(diffs[0]?.meta.a.turns ?? base.turns.length),
     deltaLabels: diffs.map((d) =>
-      formatSigned(d.meta.b.turns - d.meta.a.turns),
+      formatSigned(d.meta.b.turns - d.meta.a.turns)
     ),
+    label: "turns",
   });
   rows.push({
-    label: "duration",
     baseLabel: formatDuration(
       diffs[0]?.meta.a.durationMs ??
-        base.endedAt.getTime() - base.startedAt.getTime(),
+        base.endedAt.getTime() - base.startedAt.getTime()
     ),
     deltaLabels: diffs.map((d) =>
-      formatSignedDuration(d.meta.b.durationMs - d.meta.a.durationMs),
+      formatSignedDuration(d.meta.b.durationMs - d.meta.a.durationMs)
     ),
+    label: "duration",
   });
 
   for (const tokenClass of TOKEN_CLASS_ORDER) {
     rows.push({
-      label: TOKEN_CLASS_LABELS[tokenClass],
       baseLabel: formatNumber(diffs[0]?.totals[tokenClass].a ?? 0),
       deltaLabels: diffs.map((d) => formatSigned(d.totals[tokenClass].delta)),
+      label: TOKEN_CLASS_LABELS[tokenClass],
     });
   }
 
   rows.push({
-    label: "cost",
     baseLabel: baseTotals.priced ? formatCost(baseTotals.cost) : "—",
     deltaLabels: diffs.map((d) =>
-      d.cost.bothPriced ? formatSignedCost(d.cost.delta) : "—",
+      d.cost.bothPriced ? formatSignedCost(d.cost.delta) : "—"
     ),
+    label: "cost",
   });
 
   rows.push({
-    label: "compactions (count)",
     baseLabel: formatNumber(diffs[0]?.compactions.countA ?? 0),
     deltaLabels: diffs.map((d) =>
-      formatSigned(d.compactions.countB - d.compactions.countA),
+      formatSigned(d.compactions.countB - d.compactions.countA)
     ),
+    label: "compactions (count)",
   });
   rows.push({
-    label: "compactions (shrink)",
     baseLabel: exactOrUnknown(diffs[0]?.compactions.shrinkTotalA ?? 0),
     deltaLabels: diffs.map((d) =>
       d.compactions.shrinkTotalA === null || d.compactions.shrinkTotalB === null
         ? "unknown"
-        : formatSigned(d.compactions.shrinkTotalB - d.compactions.shrinkTotalA),
+        : formatSigned(d.compactions.shrinkTotalB - d.compactions.shrinkTotalA)
     ),
+    label: "compactions (shrink)",
   });
 
-  return { base: baseColumn, others, comparabilityWarnings, rows };
+  return { base: baseColumn, comparabilityWarnings, others, rows };
 }
 
 function printDiffLastNReport(report: DiffLastNReport): void {
@@ -523,13 +537,19 @@ function printDiffLastNReport(report: DiffLastNReport): void {
 
   report.others.forEach((other, i) => {
     const warnings = report.comparabilityWarnings[i] ?? [];
-    if (warnings.length === 0) return;
+    if (warnings.length === 0) {
+      return;
+    }
     out.push(
-      pc.yellow(pc.bold(`⚠ ${report.base.id} vs ${other.id} diverges on:`)),
+      pc.yellow(pc.bold(`⚠ ${report.base.id} vs ${other.id} diverges on:`))
     );
-    for (const warning of warnings) out.push(pc.yellow(`  - ${warning}`));
+    for (const warning of warnings) {
+      out.push(pc.yellow(`  - ${warning}`));
+    }
   });
-  if (out.length > 0) out.push("");
+  if (out.length > 0) {
+    out.push("");
+  }
 
   out.push(pc.bold(`peek diff --last ${report.others.length + 1}`));
   out.push(pc.dim(`  base: ${report.base.id} (${report.base.harness})`));
@@ -537,17 +557,17 @@ function printDiffLastNReport(report: DiffLastNReport): void {
 
   const headers = [
     { header: "field" },
-    { header: "base", align: "right" as const },
+    { align: "right" as const, header: "base" },
     ...report.others.map((o) => ({
-      header: `Δ ${o.id}`,
       align: "right" as const,
+      header: `Δ ${o.id}`,
     })),
   ];
   out.push(
     renderTable(
       headers,
-      report.rows.map((r) => [r.label, r.baseLabel, ...r.deltaLabels]),
-    ),
+      report.rows.map((r) => [r.label, r.baseLabel, ...r.deltaLabels])
+    )
   );
 
   process.stdout.write(`${out.join("\n")}\n`);
@@ -558,14 +578,14 @@ function printDiffLastNReport(report: DiffLastNReport): void {
 // ---------------------------------------------------------------------------
 
 export interface DiffCommandOptions {
-  harness?: HarnessId;
-  cwd?: string;
   allProjects?: boolean;
+  cwd?: string;
+  harness?: HarnessId;
+  json?: boolean;
   /** 2..5 supported (v2, Lane F5 — generalized from v1's fixed `--last 2`).
    * n===2 renders the full DiffReport; n>2 renders the compact
    * pairwise-vs-first DiffLastNReport (buildDiffLastNReport). */
   last?: number;
-  json?: boolean;
   /** Discovery root overrides — test-only escape hatch, same shape as
    * commands/shared.ts's ResolveOptions.roots. */
   roots?: Partial<Record<HarnessId, string[]>>;
@@ -574,9 +594,13 @@ export interface DiffCommandOptions {
 function findGitRoot(startDir: string): string | undefined {
   let dir = startDir;
   for (;;) {
-    if (existsSync(path.join(dir, ".git"))) return dir;
+    if (existsSync(path.join(dir, ".git"))) {
+      return dir;
+    }
     const parent = path.dirname(dir);
-    if (parent === dir) return undefined;
+    if (parent === dir) {
+      return;
+    }
     dir = parent;
   }
 }
@@ -603,7 +627,7 @@ export function resolveProjectScope(cwd: string): string {
  */
 export function buildSelectLastComparableOptions(
   opts: Pick<DiffCommandOptions, "cwd" | "allProjects" | "harness">,
-  scope: string,
+  scope: string
 ): SelectLastComparableOptions {
   const selectOpts: SelectLastComparableOptions = {
     allProjects: Boolean(opts.allProjects),
@@ -611,7 +635,9 @@ export function buildSelectLastComparableOptions(
   if (!opts.allProjects) {
     selectOpts.scopeCwd = opts.cwd ?? scope;
   }
-  if (opts.harness !== undefined) selectOpts.harness = opts.harness;
+  if (opts.harness !== undefined) {
+    selectOpts.harness = opts.harness;
+  }
   return selectOpts;
 }
 
@@ -622,10 +648,12 @@ export function buildSelectLastComparableOptions(
  * runDiffCommand's job (the runner layer), so this stays testable without
  * process-global side effects. */
 async function resolveLastN(
-  options: DiffCommandOptions,
+  options: DiffCommandOptions
 ): Promise<SelectLastComparableResult> {
   const discoverOpts: DiscoverAllOptions = {};
-  if (options.roots !== undefined) discoverOpts.roots = options.roots;
+  if (options.roots !== undefined) {
+    discoverOpts.roots = options.roots;
+  }
   const refs = await discoverAll(discoverOpts);
   const scope = options.cwd ?? resolveProjectScope(process.cwd());
   const selectOpts = buildSelectLastComparableOptions(options, scope);
@@ -673,8 +701,8 @@ function printDiffReport(report: DiffReport): void {
           formatNumber(report.meta.b.turns),
         ],
         ["duration", report.meta.a.durationLabel, report.meta.b.durationLabel],
-      ],
-    ),
+      ]
+    )
   );
   out.push("");
 
@@ -683,10 +711,10 @@ function printDiffReport(report: DiffReport): void {
     renderTable(
       [
         { header: "class" },
-        { header: "a", align: "right" },
-        { header: "b", align: "right" },
-        { header: "Δ", align: "right" },
-        { header: "%", align: "right" },
+        { align: "right", header: "a" },
+        { align: "right", header: "b" },
+        { align: "right", header: "Δ" },
+        { align: "right", header: "%" },
       ],
       report.totals.map((r) => [
         r.tokenClassLabel,
@@ -694,8 +722,8 @@ function printDiffReport(report: DiffReport): void {
         r.bLabel,
         r.deltaLabel,
         r.pctLabel,
-      ]),
-    ),
+      ])
+    )
   );
   out.push("");
 
@@ -703,7 +731,7 @@ function printDiffReport(report: DiffReport): void {
   out.push(
     report.cost.bothPriced
       ? `  ${report.cost.aLabel} → ${report.cost.bLabel}   Δ ${report.cost.deltaLabel} (${report.cost.pctLabel})`
-      : `  ${pc.dim("— (one or both sessions have unpriced turns)")}`,
+      : `  ${pc.dim("— (one or both sessions have unpriced turns)")}`
   );
   out.push("");
 
@@ -712,32 +740,34 @@ function printDiffReport(report: DiffReport): void {
     renderTable(
       [
         { header: "category" },
-        { header: "a", align: "right" },
-        { header: "b", align: "right" },
-        { header: "Δ", align: "right" },
+        { align: "right", header: "a" },
+        { align: "right", header: "b" },
+        { align: "right", header: "Δ" },
       ],
       [...report.composition, report.residual].map((r) => [
         r.categoryLabel,
         r.aLabel,
         r.bLabel,
         r.deltaLabel,
-      ]),
-    ),
+      ])
+    )
   );
   out.push(`  ${pc.dim(RESIDUAL_LABEL)}`);
   out.push("");
 
   out.push(pc.bold("compactions"));
   out.push(
-    `  a: ${formatNumber(report.compactions.countA)} compaction(s), shrink ${report.compactions.shrinkTotalLabelA}, discarded ${report.compactions.discardedEstLabelA}`,
+    `  a: ${formatNumber(report.compactions.countA)} compaction(s), shrink ${report.compactions.shrinkTotalLabelA}, discarded ${report.compactions.discardedEstLabelA}`
   );
   out.push(
-    `  b: ${formatNumber(report.compactions.countB)} compaction(s), shrink ${report.compactions.shrinkTotalLabelB}, discarded ${report.compactions.discardedEstLabelB}`,
+    `  b: ${formatNumber(report.compactions.countB)} compaction(s), shrink ${report.compactions.shrinkTotalLabelB}, discarded ${report.compactions.discardedEstLabelB}`
   );
   out.push("");
 
   out.push(pc.bold("config"));
-  for (const line of report.config) out.push(`  ${line}`);
+  for (const line of report.config) {
+    out.push(`  ${line}`);
+  }
 
   process.stdout.write(`${out.join("\n")}\n`);
 }
@@ -745,17 +775,36 @@ function printDiffReport(report: DiffReport): void {
 const LAST_MIN = 2;
 const LAST_MAX = 5;
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mutually exclusive CLI modes are validated and dispatched together.
 export async function runDiffCommand(
   a: string | undefined,
   b: string | undefined,
-  options: DiffCommandOptions,
+  options: DiffCommandOptions
 ): Promise<void> {
   let refs: SessionRef[];
 
-  if (options.last !== undefined) {
+  if (options.last === undefined) {
+    if (a === undefined || b === undefined) {
+      throw new Error("peek diff requires <a> <b>, or --last <n>");
+    }
+    const resolveOpts: ResolveOptions = {};
+    if (options.harness !== undefined) {
+      resolveOpts.harness = options.harness;
+    }
+    if (options.cwd !== undefined) {
+      resolveOpts.cwd = options.cwd;
+    }
+    if (options.roots !== undefined) {
+      resolveOpts.roots = options.roots;
+    }
+    refs = await Promise.all([
+      resolveSessionRef(a, resolveOpts),
+      resolveSessionRef(b, resolveOpts),
+    ]);
+  } else {
     if (options.last < LAST_MIN || options.last > LAST_MAX) {
       throw new Error(
-        `--last must be between ${LAST_MIN} and ${LAST_MAX} (got: ${options.last})`,
+        `--last must be between ${LAST_MIN} and ${LAST_MAX} (got: ${options.last})`
       );
     }
     if (a !== undefined || b !== undefined) {
@@ -764,24 +813,12 @@ export async function runDiffCommand(
     const result = await resolveLastN(options);
     if (!result.refs) {
       process.stdout.write(
-        `${result.reason ?? "no comparable session set found"}\n`,
+        `${result.reason ?? "no comparable session set found"}\n`
       );
       process.exitCode = 2;
       return;
     }
-    refs = result.refs;
-  } else {
-    if (a === undefined || b === undefined) {
-      throw new Error("peek diff requires <a> <b>, or --last <n>");
-    }
-    const resolveOpts: ResolveOptions = {};
-    if (options.harness !== undefined) resolveOpts.harness = options.harness;
-    if (options.cwd !== undefined) resolveOpts.cwd = options.cwd;
-    if (options.roots !== undefined) resolveOpts.roots = options.roots;
-    refs = await Promise.all([
-      resolveSessionRef(a, resolveOpts),
-      resolveSessionRef(b, resolveOpts),
-    ]);
+    ({ refs } = result);
   }
 
   const sessions = await Promise.all(refs.map((ref) => loadDiffSession(ref)));
@@ -825,25 +862,25 @@ export function registerDiffCommand(program: Command): void {
     .description(
       "Compare two sessions: token/cost/composition/compaction deltas + config changes. " +
         "`--last 2` diffs the two most recent comparable sessions in scope (README headline); " +
-        "`--last <n>` (n up to 5) renders a compact pairwise-vs-first table instead.",
+        "`--last <n>` (n up to 5) renders a compact pairwise-vs-first table instead."
     )
     .option(
       "--last <n>",
       "diff the last n sessions in scope (2..5; n>2 renders a compact pairwise-vs-first table)",
-      parseLastOption,
+      parseLastOption
     )
     .option(
       "--harness <harness>",
       "restrict to one harness: claude-code | codex | pi",
-      parseHarnessOption,
+      parseHarnessOption
     )
     .option(
       "--cwd <path>",
-      "restrict session resolution / --last <n>'s project scope to this working directory",
+      "restrict session resolution / --last <n>'s project scope to this working directory"
     )
     .option(
       "--all-projects",
-      "widen --last <n>'s project scope across all projects (same harness still required)",
+      "widen --last <n>'s project scope across all projects (same harness still required)"
     )
     .option("--json", "emit the full computed structure as JSON")
     .action(
@@ -856,23 +893,29 @@ export function registerDiffCommand(program: Command): void {
           cwd?: string;
           allProjects?: boolean;
           json?: boolean;
-        },
+        }
       ) => {
         try {
           const commandOpts: DiffCommandOptions = { json: Boolean(opts.json) };
-          if (opts.last !== undefined) commandOpts.last = opts.last;
-          if (opts.harness !== undefined) commandOpts.harness = opts.harness;
-          if (opts.cwd !== undefined) commandOpts.cwd = opts.cwd;
+          if (opts.last !== undefined) {
+            commandOpts.last = opts.last;
+          }
+          if (opts.harness !== undefined) {
+            commandOpts.harness = opts.harness;
+          }
+          if (opts.cwd !== undefined) {
+            commandOpts.cwd = opts.cwd;
+          }
           if (opts.allProjects !== undefined) {
             commandOpts.allProjects = Boolean(opts.allProjects);
           }
           await runDiffCommand(a, b, commandOpts);
         } catch (err) {
           process.stderr.write(
-            `${err instanceof Error ? err.message : String(err)}\n`,
+            `${err instanceof Error ? err.message : String(err)}\n`
           );
           process.exitCode = 1;
         }
-      },
+      }
     );
 }

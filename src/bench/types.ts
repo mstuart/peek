@@ -31,8 +31,8 @@ export interface BenchTask {
   name: string;
   prompt: string;
   setup?: string[];
-  verify: string;
   timeoutS?: number;
+  verify: string;
 }
 
 /** Fallback per-trial timeout (seconds) when neither the task nor `--timeout`
@@ -41,25 +41,25 @@ export const DEFAULT_TASK_TIMEOUT_S = 600;
 
 export interface BenchRunner {
   harness: HarnessId;
-  run(trial: TrialSpec): Promise<TrialOutcome>; // spawns, waits, kills on timeout
+  run: (trial: TrialSpec) => Promise<TrialOutcome>; // spawns, waits, kills on timeout
 }
 
 export interface TrialSpec {
-  task: BenchTask;
   configName: string;
-  workspaceDir: string;
   model?: string;
-  timeoutS: number;
   perTrialBudgetUsd?: number;
+  task: BenchTask;
+  timeoutS: number;
+  workspaceDir: string;
 }
 
 export interface TrialOutcome {
   exitCode: number | null;
-  timedOut: boolean;
-  wallMs: number;
+  raw?: unknown; // harness result JSON (claude) when available
   sessionPath?: string; // resolved transcript/rollout path
   stderrTail: string; // last 2KB verbatim (version-drift forensics)
-  raw?: unknown; // harness result JSON (claude) when available
+  timedOut: boolean;
+  wallMs: number;
 }
 
 /**
@@ -73,6 +73,9 @@ export interface TrialOutcome {
  * kind:"compaction" for compactionCount.
  */
 export interface SessionTotalsLike {
+  compactionCount: number;
+  cost: number;
+  priced: boolean;
   tokens: {
     inputUncached: number;
     cacheRead: number;
@@ -81,18 +84,15 @@ export interface SessionTotalsLike {
     output: number;
     contextTotal: number;
   };
-  cost: number;
-  priced: boolean;
-  compactionCount: number;
 }
 
 export interface TrialResult extends TrialOutcome {
-  // written to results.jsonl, one per trial
-  taskName: string;
   configName: string;
   harness: HarnessId;
+  startedAt: string;
+  // written to results.jsonl, one per trial
+  taskName: string;
+  totals?: SessionTotalsLike; // from parsing sessionPath with peek's adapters
   trialIndex: number;
   verify: { exitCode: number | null; passed: boolean };
-  totals?: SessionTotalsLike; // from parsing sessionPath with peek's adapters
-  startedAt: string;
 }

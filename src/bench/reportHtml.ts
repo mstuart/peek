@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: Preserve the existing public module path.
 // `peek bench report -o <file>.html` (A4 deliverable #4) — a NEW,
 // self-contained module following render/html.ts's conventions (documented
 // there): pure string-building, zero JS, inline CSS only, no external URLs
@@ -17,11 +18,11 @@
 import type { CompareCell, CompareDeltaRow, CompareTable } from "./compare.js";
 
 const HTML_ESCAPES: Record<string, string> = {
+  "'": "&#39;",
+  '"': "&quot;",
   "&": "&amp;",
   "<": "&lt;",
   ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
 };
 
 function esc(value: string): string {
@@ -134,11 +135,12 @@ function buildCss(): string {
 /** Wraps a delta label in a color class when it starts with "+"/"-" — purely
  * cosmetic (green/red), never changes the text content. */
 function deltaSpan(label: string): string {
-  const cls = label.startsWith("+")
-    ? "delta-pos"
-    : label.startsWith("-")
-      ? "delta-neg"
-      : "";
+  let cls = "";
+  if (label.startsWith("+")) {
+    cls = "delta-pos";
+  } else if (label.startsWith("-")) {
+    cls = "delta-neg";
+  }
   return cls ? `<span class="${cls}">${esc(label)}</span>` : esc(label);
 }
 
@@ -166,7 +168,7 @@ function buildOverallStats(table: CompareTable): string {
     `;
   }
   const { a, b, delta } = table.overall;
-  const tiles: Array<[string, string, string]> = [
+  const tiles: [string, string, string][] = [
     ["Success rate", esc(a.successRateLabel), esc(b.successRateLabel)],
     ["Median wall", esc(a.medianWallLabel), esc(b.medianWallLabel)],
     ["Median tokens", esc(a.medianTokensLabel), esc(b.medianTokensLabel)],
@@ -183,7 +185,7 @@ function buildOverallStats(table: CompareTable): string {
         <div class="tile">
           <div class="tile-label">${label}</div>
           <div class="tile-value">${av} &rarr; ${bv}</div>
-        </div>`,
+        </div>`
     )
     .join("");
   return `
@@ -202,11 +204,13 @@ function buildOverallStats(table: CompareTable): string {
 }
 
 function buildMissingWarning(table: CompareTable): string {
-  if (table.missing.length === 0) return "";
+  if (table.missing.length === 0) {
+    return "";
+  }
   const items = table.missing
     .map(
       (m) =>
-        `<li>${esc(m.taskName)} — no trials for config ${m.missingConfig === "a" ? esc(table.configA) : esc(table.configB)}</li>`,
+        `<li>${esc(m.taskName)} — no trials for config ${m.missingConfig === "a" ? esc(table.configA) : esc(table.configB)}</li>`
     )
     .join("");
   return `
@@ -241,7 +245,7 @@ function buildDeltaTable(table: CompareTable): string {
           <td>${esc(d.a.compactionTotalLabel)}</td>
           <td>${esc(d.b.compactionTotalLabel)}</td>
           <td>${deltaSpan(d.compactionDeltaLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -278,7 +282,7 @@ function buildCellsTable(cells: readonly CompareCell[]): string {
           <td>${esc(c.medianTokensLabel)}</td>
           <td>${esc(c.medianCostLabel)}</td>
           <td>${esc(c.compactionTotalLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -307,9 +311,9 @@ function buildFooter(peekVersion: string, generatedAtISO: string): string {
 // ---------------------------------------------------------------------------
 
 export interface BenchReportMeta {
+  generatedAtISO: string;
   harness: string;
   peekVersion: string;
-  generatedAtISO: string;
 }
 
 /**
@@ -319,7 +323,7 @@ export interface BenchReportMeta {
  */
 export function renderBenchReportHtml(
   table: CompareTable,
-  meta: BenchReportMeta,
+  meta: BenchReportMeta
 ): string {
   const title = `peek bench report — ${esc(table.configA)} vs ${esc(table.configB)}`;
   return `<!doctype html>

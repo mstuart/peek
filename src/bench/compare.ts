@@ -26,7 +26,9 @@ import type { TrialResult } from "./types.js";
 // ---------------------------------------------------------------------------
 
 function median(values: readonly number[]): number | null {
-  if (values.length === 0) return null;
+  if (values.length === 0) {
+    return null;
+  }
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 0) {
@@ -44,9 +46,13 @@ function median(values: readonly number[]): number | null {
 // ---------------------------------------------------------------------------
 
 function formatWallMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (!Number.isFinite(ms) || ms < 0) {
+    return "—";
+  }
   const totalSeconds = ms / 1000;
-  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
   const totalMinutes = Math.floor(totalSeconds / 60);
   const seconds = Math.round(totalSeconds % 60);
   return `${totalMinutes}m ${String(seconds).padStart(2, "0")}s`;
@@ -59,12 +65,19 @@ function formatWallMs(ms: number): string {
  * (b faster than a) when this used to just call `format(n)` directly for
  * n < 0 instead of `format(Math.abs(n))`. */
 function signedFormat(n: number, format: (n: number) => string): string {
-  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  let sign = "";
+  if (n > 0) {
+    sign = "+";
+  } else if (n < 0) {
+    sign = "-";
+  }
   return `${sign}${format(Math.abs(n))}`;
 }
 
 function pctChangeSuffix(a: number, b: number): string {
-  if (a === 0) return "";
+  if (a === 0) {
+    return "";
+  }
   const pct = ((b - a) / Math.abs(a)) * 100;
   const sign = pct > 0 ? "+" : "";
   return ` (${sign}${pct.toFixed(1)}%)`;
@@ -76,20 +89,20 @@ function pctChangeSuffix(a: number, b: number): string {
 // ---------------------------------------------------------------------------
 
 export interface CompareStats {
-  trialCount: number;
+  compactionTotal: number | null; // sum across the totalsCount trials; null when totalsCount === 0
+  compactionTotalLabel: string;
+  medianCost: number | null; // null when pricedCount === 0
+  medianCostLabel: string;
+  medianTokens: number | null; // null when totalsCount === 0
+  medianTokensLabel: string; // "—" when null
+  medianWallLabel: string;
+  medianWallMs: number; // always known — TrialOutcome.wallMs is never absent
+  pricedCount: number; // of totalsCount, how many were priced (real $ figures)
   successCount: number;
   successRate: number; // 0..1
   successRateLabel: string; // "4/5 (80%)"
-  medianWallMs: number; // always known — TrialOutcome.wallMs is never absent
-  medianWallLabel: string;
   totalsCount: number; // trials whose session parsed (totals present)
-  medianTokens: number | null; // null when totalsCount === 0
-  medianTokensLabel: string; // "—" when null
-  pricedCount: number; // of totalsCount, how many were priced (real $ figures)
-  medianCost: number | null; // null when pricedCount === 0
-  medianCostLabel: string;
-  compactionTotal: number | null; // sum across the totalsCount trials; null when totalsCount === 0
-  compactionTotalLabel: string;
+  trialCount: number;
 }
 
 function computeStats(trials: readonly TrialResult[]): CompareStats {
@@ -101,7 +114,7 @@ function computeStats(trials: readonly TrialResult[]): CompareStats {
 
   const withTotals = trials.filter(
     (t): t is TrialResult & { totals: NonNullable<TrialResult["totals"]> } =>
-      t.totals !== undefined,
+      t.totals !== undefined
   );
   const totalsCount = withTotals.length;
   const medianTokens =
@@ -119,27 +132,27 @@ function computeStats(trials: readonly TrialResult[]): CompareStats {
     pricedCount > 0 ? median(priced.map((t) => t.totals.cost)) : null;
 
   return {
-    trialCount,
-    successCount,
-    successRate,
-    successRateLabel: `${successCount}/${trialCount} (${Math.round(successRate * 100)}%)`,
-    medianWallMs,
-    medianWallLabel: formatWallMs(medianWallMs),
-    totalsCount,
-    medianTokens,
-    medianTokensLabel: medianTokens === null ? "—" : formatNumber(medianTokens),
-    pricedCount,
-    medianCost,
-    medianCostLabel: medianCost === null ? "—" : formatCost(medianCost),
     compactionTotal,
     compactionTotalLabel:
       compactionTotal === null ? "—" : formatNumber(compactionTotal),
+    medianCost,
+    medianCostLabel: medianCost === null ? "—" : formatCost(medianCost),
+    medianTokens,
+    medianTokensLabel: medianTokens === null ? "—" : formatNumber(medianTokens),
+    medianWallLabel: formatWallMs(medianWallMs),
+    medianWallMs,
+    pricedCount,
+    successCount,
+    successRate,
+    successRateLabel: `${successCount}/${trialCount} (${Math.round(successRate * 100)}%)`,
+    totalsCount,
+    trialCount,
   };
 }
 
 export interface CompareCell extends CompareStats {
-  taskName: string;
   configName: string;
+  taskName: string;
 }
 
 export interface CompareSummaryRow extends CompareStats {
@@ -177,9 +190,11 @@ export function groupCells(results: readonly TrialResult[]): CompareCell[] {
   const cells: CompareCell[] = [];
   for (const taskName of taskOrder) {
     const byConfig = byTask.get(taskName);
-    if (!byConfig) continue;
+    if (!byConfig) {
+      continue;
+    }
     for (const [configName, trials] of byConfig) {
-      cells.push({ taskName, configName, ...computeStats(trials) });
+      cells.push({ configName, taskName, ...computeStats(trials) });
     }
   }
   return cells;
@@ -189,10 +204,12 @@ export function groupCells(results: readonly TrialResult[]): CompareCell[] {
  * summary row". */
 function summaryFor(
   results: readonly TrialResult[],
-  configName: string,
+  configName: string
 ): CompareSummaryRow | null {
   const trials = results.filter((r) => r.configName === configName);
-  if (trials.length === 0) return null;
+  if (trials.length === 0) {
+    return null;
+  }
   return { configName, ...computeStats(trials) };
 }
 
@@ -201,20 +218,20 @@ function summaryFor(
 // ---------------------------------------------------------------------------
 
 export interface CompareDeltaRow {
-  taskName: string;
   a: CompareStats;
   b: CompareStats;
-  successDeltaLabel: string; // percentage points, e.g. "+20pp"
-  wallDeltaLabel: string;
-  tokensDeltaLabel: string;
-  costDeltaLabel: string;
   compactionDeltaLabel: string;
+  costDeltaLabel: string;
+  successDeltaLabel: string; // percentage points, e.g. "+20pp"
+  taskName: string;
+  tokensDeltaLabel: string;
+  wallDeltaLabel: string;
 }
 
 function buildDeltaRow(
   taskName: string,
   a: CompareStats,
-  b: CompareStats,
+  b: CompareStats
 ): CompareDeltaRow {
   const successDeltaPp = (b.successRate - a.successRate) * 100;
   const successDeltaLabel = `${successDeltaPp > 0 ? "+" : ""}${successDeltaPp.toFixed(1)}pp`;
@@ -241,30 +258,30 @@ function buildDeltaRow(
       : signedFormat(b.compactionTotal - a.compactionTotal, formatNumber);
 
   return {
-    taskName,
     a,
     b,
-    successDeltaLabel,
-    wallDeltaLabel,
-    tokensDeltaLabel,
-    costDeltaLabel,
     compactionDeltaLabel,
+    costDeltaLabel,
+    successDeltaLabel,
+    taskName,
+    tokensDeltaLabel,
+    wallDeltaLabel,
   };
 }
 
 export interface CompareMissing {
-  taskName: string;
   missingConfig: "a" | "b"; // which side (configA/configB) has zero trials for this task
+  taskName: string;
 }
 
 export interface CompareTable {
-  configA: string;
-  configB: string;
   /** Every task x config cell present in the input — ANY config names, not
    * just configA/configB (transparency: a stray/typo'd configName in the
    * results file is still visible here even though it's excluded from
    * `deltas`, which is strictly configA-vs-configB). */
   cells: CompareCell[];
+  configA: string;
+  configB: string;
   /** One row per task present in BOTH configA and configB — tasks missing
    * from one side are listed in `missing` instead of silently dropped. */
   deltas: CompareDeltaRow[];
@@ -285,7 +302,7 @@ const OVERALL_LABEL = "ALL TASKS";
 export function buildCompareTable(
   results: readonly TrialResult[],
   configA: string,
-  configB: string,
+  configB: string
 ): CompareTable {
   const cells = groupCells(results);
 
@@ -310,9 +327,9 @@ export function buildCompareTable(
     if (a && b) {
       deltas.push(buildDeltaRow(taskName, a, b));
     } else if (!a) {
-      missing.push({ taskName, missingConfig: "a" });
+      missing.push({ missingConfig: "a", taskName });
     } else if (!b) {
-      missing.push({ taskName, missingConfig: "b" });
+      missing.push({ missingConfig: "b", taskName });
     }
   }
 
@@ -327,5 +344,5 @@ export function buildCompareTable(
         }
       : null;
 
-  return { configA, configB, cells, deltas, missing, overall };
+  return { cells, configA, configB, deltas, missing, overall };
 }

@@ -20,17 +20,17 @@ function tmpDir(prefix: string): string {
 
 function baseResult(raw: unknown): TrialResult {
   return {
-    exitCode: 0,
-    timedOut: false,
-    wallMs: 1234,
-    stderrTail: "",
-    raw,
-    taskName: "task-a",
     configName: "config-a",
+    exitCode: 0,
     harness: "claude-code",
+    raw,
+    startedAt: "2026-08-09T00:00:00.000Z",
+    stderrTail: "",
+    taskName: "task-a",
+    timedOut: false,
     trialIndex: 0,
     verify: { exitCode: 0, passed: true },
-    startedAt: "2026-08-09T00:00:00.000Z",
+    wallMs: 1234,
   };
 }
 
@@ -43,19 +43,19 @@ describe("results.ts — raw redaction on write", () => {
     });
 
     const raw = {
-      type: "result",
-      subtype: "success",
-      is_error: false,
-      session_id: "sess-123",
-      duration_ms: 4200,
+      arbitrary_free_text_field: "some other content that should never persist",
       duration_api_ms: 3800,
+      duration_ms: 4200,
+      is_error: false,
       num_turns: 3,
-      total_cost_usd: 0.42,
-      usage: { input_tokens: 100, output_tokens: 50 },
       permission_denials: [],
       result:
         "Here is the full agent response, verbatim, including anything the user asked about in the workspace.",
-      arbitrary_free_text_field: "some other content that should never persist",
+      session_id: "sess-123",
+      subtype: "success",
+      total_cost_usd: 0.42,
+      type: "result",
+      usage: { input_tokens: 100, output_tokens: 50 },
     };
     await writer.append(baseResult(raw));
 

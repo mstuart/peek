@@ -18,24 +18,29 @@ import { dedupSession } from "../../src/engine/dedup.js";
 import { diffSessions, selectLastComparable } from "../../src/engine/diff.js";
 import type { Session, SessionRef } from "../../src/model/types.js";
 
+const TEST_PATTERN_1 = /fewer than 2/;
+const TEST_PATTERN_2 = /fewer than 4/;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
 
-async function claudeRefs(): Promise<SessionRef[]> {
+function claudeRefs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
 }
 
-async function codexRefs(): Promise<SessionRef[]> {
+function codexRefs(): Promise<SessionRef[]> {
   return discoverCodexSessions([CODEX_FIXTURES_ROOT]);
 }
 
 function findRef(
   all: SessionRef[],
-  predicate: (r: SessionRef) => boolean,
+  predicate: (r: SessionRef) => boolean
 ): SessionRef {
   const ref = all.find(predicate);
-  if (!ref) throw new Error("fixture ref not found");
+  if (!ref) {
+    throw new Error("fixture ref not found");
+  }
   return ref;
 }
 
@@ -72,9 +77,9 @@ describe("diffSessions", () => {
     // raw usage fields (verified against the fixture content directly).
     expect(diff.totals.inputUncached).toEqual({
       a: 350,
-      b: 15200,
-      delta: 14850,
-      pct: 14850 / 350,
+      b: 15_200,
+      delta: 14_850,
+      pct: 14_850 / 350,
     });
     expect(diff.totals.cacheRead).toEqual({
       a: 200,
@@ -106,13 +111,13 @@ describe("diffSessions", () => {
     expect(diff.compactions.countA).toBe(0);
     expect(diff.compactions.countB).toBe(1);
     expect(diff.compactions.shrinkTotalA).toBe(0);
-    expect(diff.compactions.shrinkTotalB).toBe(17000);
+    expect(diff.compactions.shrinkTotalB).toBe(17_000);
     expect(diff.compactions.discardedEstA).toBe(0);
-    expect(diff.compactions.discardedEstB).toBe(17040);
+    expect(diff.compactions.discardedEstB).toBe(17_040);
 
     expect(diff.cost.bothPriced).toBe(true);
     expect(diff.cost.a).toBeCloseTo(0.0256, 6);
-    expect(diff.cost.b).toBeCloseTo(0.04406, 6);
+    expect(diff.cost.b).toBeCloseTo(0.044_06, 6);
 
     // Both fixtures share cwd/gitBranch and turn count/duration stay under
     // the divergence thresholds — no comparability warnings on this pair.
@@ -131,14 +136,14 @@ describe("diffSessions", () => {
     expect(diff.meta.a.harness).toBe("claude-code");
     expect(diff.meta.b.harness).toBe("codex");
     expect(diff.comparability.warnings).toContain(
-      "harness differs: a=claude-code b=codex",
+      "harness differs: a=claude-code b=codex"
     );
   });
 
   it("systemPromptChanged: codex vs codex differs; claude vs claude is unknown", async () => {
     const fullTurn = await processedCodexSession("full-turn.jsonl");
     const realCapture = await processedCodexSession(
-      "real-capture-redacted.jsonl",
+      "real-capture-redacted.jsonl"
     );
     const codexDiff = diffSessions(fullTurn, realCapture);
     expect(codexDiff.config.systemPromptChanged).toBe("differs");
@@ -157,10 +162,10 @@ describe("selectLastComparable", () => {
     return {
       harness: "claude-code",
       id: "id",
+      kind: "main",
+      mtime: T("2026-08-08T00:00:00.000Z"),
       path: "/path",
       sizeBytes: 100,
-      mtime: T("2026-08-08T00:00:00.000Z"),
-      kind: "main",
       ...over,
     };
   }
@@ -172,41 +177,41 @@ describe("selectLastComparable", () => {
   // into a claude-code, project-A-scoped query (audit R3-F3 gate case).
   const refs: SessionRef[] = [
     ref({
-      id: "a-old",
-      harness: "claude-code",
       cwd: "project-a",
+      harness: "claude-code",
+      id: "a-old",
       mtime: T("2026-08-01T10:00:00.000Z"),
     }),
     ref({
-      id: "a-new",
-      harness: "claude-code",
       cwd: "project-a",
+      harness: "claude-code",
+      id: "a-new",
       mtime: T("2026-08-05T10:00:00.000Z"),
     }),
     ref({
-      id: "b-project",
-      harness: "claude-code",
       cwd: "project-b",
+      harness: "claude-code",
+      id: "b-project",
       mtime: T("2026-08-06T10:00:00.000Z"),
     }),
     ref({
-      id: "a-subagent",
-      harness: "claude-code",
       cwd: "project-a",
+      harness: "claude-code",
+      id: "a-subagent",
       kind: "subagent",
       mtime: T("2026-08-07T10:00:00.000Z"),
     }),
     ref({
-      id: "codex-newest",
       harness: "codex",
+      id: "codex-newest",
       // no cwd — matches every real adapter's discover.ts: codex refs never
       // carry cwd until parse time.
       mtime: T("2026-08-09T10:00:00.000Z"), // newest of ALL refs
     }),
     ref({
-      id: "a-oldest",
-      harness: "claude-code",
       cwd: "project-a",
+      harness: "claude-code",
+      id: "a-oldest",
       mtime: T("2026-07-25T10:00:00.000Z"),
     }),
   ];
@@ -226,7 +231,7 @@ describe("selectLastComparable", () => {
   it("reports a reason when fewer than 2 candidates are in scope", () => {
     const result = selectLastComparable(refs, { scopeCwd: "project-b" });
     expect(result.refs).toBeUndefined();
-    expect(result.reason).toMatch(/fewer than 2/);
+    expect(result.reason).toMatch(TEST_PATTERN_1);
   });
 
   it("reports a reason for a scope with no candidates at all", () => {
@@ -240,21 +245,21 @@ describe("selectLastComparable", () => {
     // still can't produce a same-harness pair once codex wins the
     // most-recent-overall tiebreak.
     const result = selectLastComparable(refs, { allProjects: true });
-    expect(result.reason).toMatch(/fewer than 2/);
+    expect(result.reason).toMatch(TEST_PATTERN_1);
   });
 
   it("an explicit harness widens to unknowable-cwd refs of that harness", () => {
     const withSecondCodexRef = [
       ...refs,
       ref({
-        id: "codex-older",
         harness: "codex",
+        id: "codex-older",
         mtime: T("2026-08-02T10:00:00.000Z"),
       }),
     ];
     const result = selectLastComparable(withSecondCodexRef, {
-      scopeCwd: "project-a",
       harness: "codex",
+      scopeCwd: "project-a",
     });
     expect(result.refs?.map((r) => r.id)).toEqual([
       "codex-newest",
@@ -282,6 +287,6 @@ describe("selectLastComparable", () => {
       take: 4,
     });
     expect(result.refs).toBeUndefined();
-    expect(result.reason).toMatch(/fewer than 4/);
+    expect(result.reason).toMatch(TEST_PATTERN_2);
   });
 });

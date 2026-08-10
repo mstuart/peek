@@ -21,7 +21,9 @@
 import type { CompactionEvent, Turn } from "../../model/types.js";
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -64,7 +66,7 @@ function prop(raw: unknown, key: string): unknown {
 export function buildCompactionEventFromCompactedRecord(
   payload: unknown,
   at: Date,
-  turns: readonly Turn[],
+  turns: readonly Turn[]
 ): CompactionEvent {
   const message = prop(payload, "message");
   const summaryText = typeof message === "string" ? message : "";
@@ -75,23 +77,29 @@ export function buildCompactionEventFromCompactedRecord(
   const previousWindowId = prop(payload, "previous_window_id");
   const firstWindowId = prop(payload, "first_window_id");
   const lineage: CompactionEvent["lineage"] = {};
-  if (typeof windowNumber === "number") lineage.windowNumber = windowNumber;
-  if (typeof windowId === "string") lineage.windowId = windowId;
+  if (typeof windowNumber === "number") {
+    lineage.windowNumber = windowNumber;
+  }
+  if (typeof windowId === "string") {
+    lineage.windowId = windowId;
+  }
   if (typeof previousWindowId === "string") {
     lineage.previousWindowId = previousWindowId;
   }
-  if (typeof firstWindowId === "string") lineage.firstWindowId = firstWindowId;
+  if (typeof firstWindowId === "string") {
+    lineage.firstWindowId = firstWindowId;
+  }
 
   return {
-    kind: "compaction",
     at,
-    turnIndex,
-    tokensBeforeExact: null, // engine fills via findTokensBefore
-    tokensAfterExact: null, // engine fills from the next turn's contextTotal
-    shrinkExact: null, // engine computes (before − after)
-    discardedEst: null, // engine computes
-    summaryTokensEst: Math.ceil(summaryText.length / 4),
     cost: null,
+    discardedEst: null, // engine computes
+    kind: "compaction",
+    shrinkExact: null, // engine computes (before − after)
+    summaryTokensEst: Math.ceil(summaryText.length / 4),
+    tokensAfterExact: null, // engine fills from the next turn's contextTotal
+    tokensBeforeExact: null, // engine fills via findTokensBefore
+    turnIndex,
     ...(Object.keys(lineage).length > 0 ? { lineage } : {}),
   };
 }
@@ -108,17 +116,17 @@ export function buildCompactionEventFromCompactedRecord(
  */
 export function buildMinimalCompactionEventFromMarker(
   at: Date,
-  turns: readonly Turn[],
+  turns: readonly Turn[]
 ): CompactionEvent {
   return {
-    kind: "compaction",
     at,
-    turnIndex: turns.length,
-    tokensBeforeExact: null,
-    tokensAfterExact: null,
-    shrinkExact: null,
-    discardedEst: null,
-    summaryTokensEst: 0,
     cost: null,
+    discardedEst: null,
+    kind: "compaction",
+    shrinkExact: null,
+    summaryTokensEst: 0,
+    tokensAfterExact: null,
+    tokensBeforeExact: null,
+    turnIndex: turns.length,
   };
 }

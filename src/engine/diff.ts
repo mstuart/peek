@@ -29,9 +29,11 @@ import { type SessionTotals, sessionTotals } from "./accounting.js";
 // ---------------------------------------------------------------------------
 
 export interface SessionDiffMeta {
-  id: string;
+  /** endedAt - startedAt, in milliseconds. */
+  durationMs: number;
   harness: HarnessId;
   harnessVersion: string;
+  id: string;
   /** Distinct models actually seen across session.turns, in first-appearance
    * order (not just configSnapshot.model — configSnapshot.modelChanges
    * documents that a single session can span more than one model, and
@@ -40,8 +42,6 @@ export interface SessionDiffMeta {
   models: string[];
   startedAt: Date;
   turns: number;
-  /** endedAt - startedAt, in milliseconds. */
-  durationMs: number;
 }
 
 export interface TokenClassDelta {
@@ -54,23 +54,23 @@ export interface TokenClassDelta {
 }
 
 export interface SessionDiffTotals {
-  inputUncached: TokenClassDelta;
   cacheRead: TokenClassDelta;
-  cacheWrite5m: TokenClassDelta;
   cacheWrite1h: TokenClassDelta;
+  cacheWrite5m: TokenClassDelta;
+  inputUncached: TokenClassDelta;
   output: TokenClassDelta;
 }
 
 export interface SessionDiffCost {
   a: number;
   b: number;
-  delta: number;
-  pct: number | null; // same zero-guard as TokenClassDelta.pct
   /** true only when BOTH sessions' totals are fully priced (accounting.ts's
    * SessionTotals.priced, itself all-or-nothing over every turn) — a partial
    * dollar comparison reads as complete when it isn't, same rationale as
    * SessionTotals.priced's own doc comment. */
   bothPriced: boolean;
+  delta: number;
+  pct: number | null; // same zero-guard as TokenClassDelta.pct
 }
 
 export interface CategoryComparison {
@@ -94,6 +94,9 @@ export interface SessionDiffComposition {
 export interface SessionDiffCompactions {
   countA: number;
   countB: number;
+  /** Same rule as shrinkTotal*, applied to discardedEst. */
+  discardedEstA: number | null;
+  discardedEstB: number | null;
   /** Sum of shrinkExact across a session's CompactionEvents. 0 when the
    * session has no compactions (exact, unambiguous). null when the session
    * HAS compactions but at least one has shrinkExact === null (before/after
@@ -101,18 +104,15 @@ export interface SessionDiffCompactions {
    * silently dropping the unknown event's contribution. */
   shrinkTotalA: number | null;
   shrinkTotalB: number | null;
-  /** Same rule as shrinkTotal*, applied to discardedEst. */
-  discardedEstA: number | null;
-  discardedEstB: number | null;
 }
 
 export type ConfigFieldChange = "same" | "differs" | "unknown";
 
 export interface SessionDiffConfig {
-  modelChanged: boolean;
   harnessVersionChanged: boolean;
-  systemPromptChanged: ConfigFieldChange;
+  modelChanged: boolean;
   projectInstructionsChanged: ConfigFieldChange;
+  systemPromptChanged: ConfigFieldChange;
 }
 
 export interface SessionDiffComparability {
@@ -120,13 +120,13 @@ export interface SessionDiffComparability {
 }
 
 export interface SessionDiff {
+  compactions: SessionDiffCompactions;
+  comparability: SessionDiffComparability;
+  composition: SessionDiffComposition;
+  config: SessionDiffConfig;
+  cost: SessionDiffCost;
   meta: { a: SessionDiffMeta; b: SessionDiffMeta };
   totals: SessionDiffTotals;
-  cost: SessionDiffCost;
-  composition: SessionDiffComposition;
-  compactions: SessionDiffCompactions;
-  config: SessionDiffConfig;
-  comparability: SessionDiffComparability;
 }
 
 function pct(a: number, delta: number): number | null {
@@ -141,30 +141,34 @@ function tokenClassDelta(a: number, b: number): TokenClassDelta {
 function buildMeta(session: Session): SessionDiffMeta {
   const models: string[] = [];
   for (const turn of session.turns) {
-    if (!models.includes(turn.model)) models.push(turn.model);
+    if (!models.includes(turn.model)) {
+      models.push(turn.model);
+    }
   }
-  if (models.length === 0) models.push(session.configSnapshot.model);
+  if (models.length === 0) {
+    models.push(session.configSnapshot.model);
+  }
 
   return {
-    id: session.id,
+    durationMs: session.endedAt.getTime() - session.startedAt.getTime(),
     harness: session.harness,
     harnessVersion: session.harnessVersion,
+    id: session.id,
     models,
     startedAt: session.startedAt,
     turns: session.turns.length,
-    durationMs: session.endedAt.getTime() - session.startedAt.getTime(),
   };
 }
 
 function buildTotals(a: SessionTotals, b: SessionTotals): SessionDiffTotals {
   return {
+    cacheRead: tokenClassDelta(a.tokens.cacheRead, b.tokens.cacheRead),
+    cacheWrite1h: tokenClassDelta(a.tokens.cacheWrite1h, b.tokens.cacheWrite1h),
+    cacheWrite5m: tokenClassDelta(a.tokens.cacheWrite5m, b.tokens.cacheWrite5m),
     inputUncached: tokenClassDelta(
       a.tokens.inputUncached,
-      b.tokens.inputUncached,
+      b.tokens.inputUncached
     ),
-    cacheRead: tokenClassDelta(a.tokens.cacheRead, b.tokens.cacheRead),
-    cacheWrite5m: tokenClassDelta(a.tokens.cacheWrite5m, b.tokens.cacheWrite5m),
-    cacheWrite1h: tokenClassDelta(a.tokens.cacheWrite1h, b.tokens.cacheWrite1h),
     output: tokenClassDelta(a.tokens.output, b.tokens.output),
   };
 }
@@ -174,9 +178,9 @@ function buildCost(a: SessionTotals, b: SessionTotals): SessionDiffCost {
   return {
     a: a.cost,
     b: b.cost,
+    bothPriced: a.priced && b.priced,
     delta,
     pct: pct(a.cost, delta),
-    bothPriced: a.priced && b.priced,
   };
 }
 
@@ -186,11 +190,12 @@ function buildCost(a: SessionTotals, b: SessionTotals): SessionDiffCost {
  * compaction.ts: that module's isRealUsageTurn is private, and this is a
  * different query (last in session, not last-before/first-after an index). */
 function lastUsageCarryingTurn(session: Session): Turn | undefined {
-  for (let i = session.turns.length - 1; i >= 0; i--) {
+  for (let i = session.turns.length - 1; i >= 0; i -= 1) {
     const turn = session.turns[i];
-    if (turn && turn.contextTotal !== 0) return turn;
+    if (turn && turn.contextTotal !== 0) {
+      return turn;
+    }
   }
-  return undefined;
 }
 
 function buildComposition(a: Session, b: Session): SessionDiffComposition {
@@ -215,20 +220,20 @@ function buildComposition(a: Session, b: Session): SessionDiffComposition {
     "compactionSummaries",
     "coordination",
   ];
-  const seedCategories =
-    turnA?.composition.categories ?? turnB?.composition.categories;
-  const categoryKeys: readonly CompositionCategory[] = seedCategories
-    ? (Object.keys(seedCategories) as CompositionCategory[])
-    : CATEGORY_ORDER;
+  const categoryKeys: readonly CompositionCategory[] = CATEGORY_ORDER;
 
   const categories = {} as Record<CompositionCategory, CategoryComparison>;
   for (const category of categoryKeys) {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: A missing usage-carrying turn contributes zero.
     const av = turnA?.composition.categories[category] ?? 0;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: A missing usage-carrying turn contributes zero.
     const bv = turnB?.composition.categories[category] ?? 0;
     categories[category] = { a: av, b: bv, delta: bv - av };
   }
 
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: A missing usage-carrying turn contributes zero.
   const residualA = turnA?.composition.residual ?? 0;
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: A missing usage-carrying turn contributes zero.
   const residualB = turnB?.composition.residual ?? 0;
 
   return {
@@ -243,23 +248,31 @@ function compactionTotals(session: Session): {
   discardedEst: number | null;
 } {
   const events = session.events.filter((e) => e.kind === "compaction");
-  if (events.length === 0) return { count: 0, shrinkTotal: 0, discardedEst: 0 };
+  if (events.length === 0) {
+    return { count: 0, discardedEst: 0, shrinkTotal: 0 };
+  }
 
   let shrinkTotal = 0;
   let shrinkKnown = true;
   let discardedEst = 0;
   let discardedKnown = true;
   for (const event of events) {
-    if (event.shrinkExact === null) shrinkKnown = false;
-    else shrinkTotal += event.shrinkExact;
-    if (event.discardedEst === null) discardedKnown = false;
-    else discardedEst += event.discardedEst;
+    if (event.shrinkExact === null) {
+      shrinkKnown = false;
+    } else {
+      shrinkTotal += event.shrinkExact;
+    }
+    if (event.discardedEst === null) {
+      discardedKnown = false;
+    } else {
+      discardedEst += event.discardedEst;
+    }
   }
 
   return {
     count: events.length,
-    shrinkTotal: shrinkKnown ? shrinkTotal : null,
     discardedEst: discardedKnown ? discardedEst : null,
+    shrinkTotal: shrinkKnown ? shrinkTotal : null,
   };
 }
 
@@ -269,10 +282,10 @@ function buildCompactions(a: Session, b: Session): SessionDiffCompactions {
   return {
     countA: ca.count,
     countB: cb.count,
-    shrinkTotalA: ca.shrinkTotal,
-    shrinkTotalB: cb.shrinkTotal,
     discardedEstA: ca.discardedEst,
     discardedEstB: cb.discardedEst,
+    shrinkTotalA: ca.shrinkTotal,
+    shrinkTotalB: cb.shrinkTotal,
   };
 }
 
@@ -286,21 +299,23 @@ function sha256(text: string): string {
  * same/differs verdict from a harness that doesn't log the field at all
  * (PLAN's systemPrompt "codex only; empty elsewhere" note). */
 function compareLoggedField(a?: string, b?: string): ConfigFieldChange {
-  if (typeof a !== "string" || typeof b !== "string") return "unknown";
+  if (typeof a !== "string" || typeof b !== "string") {
+    return "unknown";
+  }
   return sha256(a) === sha256(b) ? "same" : "differs";
 }
 
 function buildConfig(a: Session, b: Session): SessionDiffConfig {
   return {
-    modelChanged: a.configSnapshot.model !== b.configSnapshot.model,
     harnessVersionChanged: a.harnessVersion !== b.harnessVersion,
-    systemPromptChanged: compareLoggedField(
-      a.configSnapshot.systemPrompt,
-      b.configSnapshot.systemPrompt,
-    ),
+    modelChanged: a.configSnapshot.model !== b.configSnapshot.model,
     projectInstructionsChanged: compareLoggedField(
       a.configSnapshot.projectInstructions,
-      b.configSnapshot.projectInstructions,
+      b.configSnapshot.projectInstructions
+    ),
+    systemPromptChanged: compareLoggedField(
+      a.configSnapshot.systemPrompt,
+      b.configSnapshot.systemPrompt
     ),
   };
 }
@@ -312,8 +327,12 @@ const DURATION_DIVERGENCE_THRESHOLD = 5;
  * (an unbounded divergence — the zero side "used none" while the other did),
  * 1 (no divergence) when both are 0. */
 function divergenceRatio(x: number, y: number): number {
-  if (x === 0 && y === 0) return 1;
-  if (x === 0 || y === 0) return Number.POSITIVE_INFINITY;
+  if (x === 0 && y === 0) {
+    return 1;
+  }
+  if (x === 0 || y === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
   return Math.max(x, y) / Math.min(x, y);
 }
 
@@ -321,7 +340,7 @@ function buildComparability(
   a: Session,
   metaA: SessionDiffMeta,
   b: Session,
-  metaB: SessionDiffMeta,
+  metaB: SessionDiffMeta
 ): SessionDiffComparability {
   const warnings: string[] = [];
 
@@ -329,7 +348,7 @@ function buildComparability(
     divergenceRatio(metaA.turns, metaB.turns) > TURN_COUNT_DIVERGENCE_THRESHOLD
   ) {
     warnings.push(
-      `turn count diverges strongly: a=${metaA.turns} b=${metaB.turns} (>${TURN_COUNT_DIVERGENCE_THRESHOLD}x)`,
+      `turn count diverges strongly: a=${metaA.turns} b=${metaB.turns} (>${TURN_COUNT_DIVERGENCE_THRESHOLD}x)`
     );
   }
   if (
@@ -337,12 +356,12 @@ function buildComparability(
     DURATION_DIVERGENCE_THRESHOLD
   ) {
     warnings.push(
-      `duration diverges strongly: a=${metaA.durationMs}ms b=${metaB.durationMs}ms (>${DURATION_DIVERGENCE_THRESHOLD}x)`,
+      `duration diverges strongly: a=${metaA.durationMs}ms b=${metaB.durationMs}ms (>${DURATION_DIVERGENCE_THRESHOLD}x)`
     );
   }
   if (a.gitBranch !== b.gitBranch) {
     warnings.push(
-      `git branch differs: a=${a.gitBranch ?? "(none)"} b=${b.gitBranch ?? "(none)"}`,
+      `git branch differs: a=${a.gitBranch ?? "(none)"} b=${b.gitBranch ?? "(none)"}`
     );
   }
   if (a.harness !== b.harness) {
@@ -367,13 +386,13 @@ export function diffSessions(a: Session, b: Session): SessionDiff {
   const totalsB = sessionTotals(b);
 
   return {
+    compactions: buildCompactions(a, b),
+    comparability: buildComparability(a, metaA, b, metaB),
+    composition: buildComposition(a, b),
+    config: buildConfig(a, b),
+    cost: buildCost(totalsA, totalsB),
     meta: { a: metaA, b: metaB },
     totals: buildTotals(totalsA, totalsB),
-    cost: buildCost(totalsA, totalsB),
-    composition: buildComposition(a, b),
-    compactions: buildCompactions(a, b),
-    config: buildConfig(a, b),
-    comparability: buildComparability(a, metaA, b, metaB),
   };
 }
 
@@ -392,6 +411,11 @@ export function diffSessions(a: Session, b: Session): SessionDiff {
 // ---------------------------------------------------------------------------
 
 export interface SelectLastComparableOptions {
+  allProjects?: boolean;
+  /** Restrict to this harness. If omitted, the harness is INFERRED — see
+   * the two-pass scope note below for how, and why naively inferring it
+   * from "most recent ref regardless of cwd" is wrong. */
+  harness?: HarnessId;
   /** The already-resolved project scope to match SessionRef.cwd against
    * (current cwd's slug / git repo root, or an explicit --cwd override —
    * resolving "current project scope" from the real filesystem is the CLI
@@ -400,11 +424,6 @@ export interface SelectLastComparableOptions {
    * no cwd filtering is applied at all (the caller didn't resolve a scope —
    * this function does not guess one). */
   scopeCwd?: string;
-  allProjects?: boolean;
-  /** Restrict to this harness. If omitted, the harness is INFERRED — see
-   * the two-pass scope note below for how, and why naively inferring it
-   * from "most recent ref regardless of cwd" is wrong. */
-  harness?: HarnessId;
   /** How many candidate sessions to select, most-recent-first. Default 2
    * (v1's only supported value). commands/diff.ts's `--last <n>` clamps n to
    * 2..5 before this is called. */
@@ -412,10 +431,10 @@ export interface SelectLastComparableOptions {
 }
 
 export interface SelectLastComparableResult {
+  reason?: string;
   /** Selected refs, most-recent-first, length === the requested `take`
    * (default 2). Undefined when fewer than `take` candidates exist. */
   refs?: SessionRef[];
-  reason?: string;
 }
 
 function byMtimeDesc(a: SessionRef, b: SessionRef): number {
@@ -434,10 +453,14 @@ function byMtimeDesc(a: SessionRef, b: SessionRef): number {
 function isInScope(
   ref: SessionRef,
   scopeCwd: string | undefined,
-  allowUnknownCwd: boolean,
+  allowUnknownCwd: boolean
 ): boolean {
-  if (scopeCwd === undefined) return true;
-  if (ref.cwd === scopeCwd) return true;
+  if (scopeCwd === undefined) {
+    return true;
+  }
+  if (ref.cwd === scopeCwd) {
+    return true;
+  }
   return allowUnknownCwd && ref.cwd === undefined;
 }
 
@@ -472,7 +495,7 @@ function isInScope(
  */
 export function selectLastComparable(
   refs: readonly SessionRef[],
-  opts: SelectLastComparableOptions = {},
+  opts: SelectLastComparableOptions = {}
 ): SelectLastComparableResult {
   const take = opts.take ?? 2;
   const mainRefs = refs.filter((r) => r.kind !== "subagent");

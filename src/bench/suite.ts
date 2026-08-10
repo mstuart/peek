@@ -3,21 +3,21 @@
 // runtime deps per the spec). `verify` exit 0 = success; there is no
 // LLM-judge in v2.0, so `verify` is required same as `prompt`/`name`.
 
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export interface BenchTask {
   name: string;
   prompt: string;
   setup?: string[];
-  verify: string;
   timeoutS?: number;
+  verify: string;
 }
 
 function requireNonEmptyString(
   obj: Record<string, unknown>,
   key: string,
-  file: string,
+  file: string
 ): string {
   const value = obj[key];
   if (typeof value !== "string" || value.trim() === "") {
@@ -39,11 +39,13 @@ function validateTask(raw: unknown, file: string): BenchTask {
   let setup: string[] | undefined;
   if (obj.setup !== undefined) {
     if (
-      !Array.isArray(obj.setup) ||
-      !obj.setup.every((s) => typeof s === "string")
+      !(
+        Array.isArray(obj.setup) &&
+        obj.setup.every((s) => typeof s === "string")
+      )
     ) {
       throw new Error(
-        `bench task "setup" must be an array of strings: ${file}`,
+        `bench task "setup" must be an array of strings: ${file}`
       );
     }
     setup = obj.setup as string[];
@@ -57,18 +59,18 @@ function validateTask(raw: unknown, file: string): BenchTask {
       obj.timeoutS <= 0
     ) {
       throw new Error(
-        `bench task "timeoutS" must be a positive number: ${file}`,
+        `bench task "timeoutS" must be a positive number: ${file}`
       );
     }
-    timeoutS = obj.timeoutS;
+    ({ timeoutS } = obj);
   }
 
   return {
     name,
     prompt,
     verify,
-    ...(setup !== undefined ? { setup } : {}),
-    ...(timeoutS !== undefined ? { timeoutS } : {}),
+    ...(setup === undefined ? {} : { setup }),
+    ...(timeoutS === undefined ? {} : { timeoutS }),
   };
 }
 
@@ -81,8 +83,10 @@ export async function loadSuite(dir: string): Promise<BenchTask[]> {
   let entries: string[];
   try {
     entries = await readdir(dir);
-  } catch {
-    throw new Error(`bench suite directory not found: ${dir}`);
+  } catch (error) {
+    throw new Error(`bench suite directory not found: ${dir}`, {
+      cause: error,
+    });
   }
 
   const files = entries.filter((f) => f.endsWith(".json")).sort();
@@ -90,6 +94,7 @@ export async function loadSuite(dir: string): Promise<BenchTask[]> {
 
   for (const file of files) {
     const full = join(dir, file);
+    // biome-ignore lint/performance/noAwaitInLoops: Preserve deterministic validation order and errors.
     const text = await readFile(full, "utf8");
     let raw: unknown;
     try {
@@ -97,6 +102,7 @@ export async function loadSuite(dir: string): Promise<BenchTask[]> {
     } catch (err) {
       throw new Error(
         `bench task file is not valid JSON: ${full} (${err instanceof Error ? err.message : String(err)})`,
+        { cause: err }
       );
     }
     tasks.push(validateTask(raw, full));

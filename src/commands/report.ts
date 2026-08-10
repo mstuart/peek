@@ -53,11 +53,11 @@ import type {
 } from "../render/html.js";
 import { renderDiffHtml, renderReportHtml } from "../render/html.js";
 import {
-  RESIDUAL_LABEL,
-  type ResolveOptions,
   buildContextReport,
   buildTurnDetail,
   loadProcessedSession,
+  RESIDUAL_LABEL,
+  type ResolveOptions,
   resolveSession,
 } from "./context.js";
 import { buildDiffReport, loadDiffSession } from "./diff.js";
@@ -75,7 +75,7 @@ function parseHarnessOption(value: string): HarnessId {
     return value as HarnessId;
   }
   throw new Error(
-    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`,
+    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`
   );
 }
 
@@ -87,18 +87,24 @@ function parseHarnessOption(value: string): HarnessId {
 // ---------------------------------------------------------------------------
 
 function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "—"; // em dash
+  if (!Number.isFinite(ms) || ms < 0) {
+    return "—"; // em dash
+  }
   const totalSeconds = Math.round(ms / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  if (h > 0) {
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+  }
+  if (m > 0) {
+    return `${m}m ${String(s).padStart(2, "0")}s`;
+  }
   return `${s}s`;
 }
 
 function isCompactionEvent(
-  event: Session["events"][number],
+  event: Session["events"][number]
 ): event is CompactionEvent {
   return event.kind === "compaction";
 }
@@ -122,9 +128,11 @@ function estOrUnknown(n: number | null): string {
  * value as the tool names/model ids this file already writes through esc()
  * at the render layer — never session content. */
 function buildLineageLabel(
-  lineage: CompactionEvent["lineage"],
+  lineage: CompactionEvent["lineage"]
 ): string | undefined {
-  if (!lineage) return undefined;
+  if (!lineage) {
+    return;
+  }
   const parts: string[] = [];
   if (lineage.windowNumber !== undefined) {
     parts.push(`window ${lineage.windowNumber}`);
@@ -134,7 +142,7 @@ function buildLineageLabel(
     lineage.windowId !== undefined
   ) {
     parts.push(
-      `${lineage.previousWindowId ?? "(none)"} → ${lineage.windowId ?? "unknown"}`,
+      `${lineage.previousWindowId ?? "(none)"} → ${lineage.windowId ?? "unknown"}`
     );
   }
   if (
@@ -149,26 +157,28 @@ function buildLineageLabel(
 function buildCompactionRows(session: Session): ReportCompactionRow[] {
   return session.events.filter(isCompactionEvent).map((event, index) => {
     const row: ReportCompactionRow = {
-      index,
       atISO: event.at.toISOString(),
       beforeTurnNumber: event.turnIndex + 1,
-      tokensBeforeLabel: exactOrUnknown(event.tokensBeforeExact),
-      tokensAfterLabel: exactOrUnknown(event.tokensAfterExact),
-      shrinkLabel: exactOrUnknown(event.shrinkExact),
       discardedLabel: estOrUnknown(event.discardedEst),
+      index,
+      shrinkLabel: exactOrUnknown(event.shrinkExact),
+      tokensAfterLabel: exactOrUnknown(event.tokensAfterExact),
+      tokensBeforeLabel: exactOrUnknown(event.tokensBeforeExact),
     };
     const lineageLabel = buildLineageLabel(event.lineage);
-    if (lineageLabel !== undefined) row.lineageLabel = lineageLabel;
+    if (lineageLabel !== undefined) {
+      row.lineageLabel = lineageLabel;
+    }
     return row;
   });
 }
 
 function buildModelRows(session: Session): ReportModelRow[] {
   return byModel(session).map((m) => ({
-    model: m.model,
-    turnCount: m.turnCount,
     contextTotal: m.tokens.contextTotal,
     costLabel: m.priced ? formatCost(m.cost) : "unpriced",
+    model: m.model,
+    turnCount: m.turnCount,
   }));
 }
 
@@ -176,10 +186,12 @@ function buildToolRows(session: Session): ReportToolRow[] {
   return byTool(session).map((t) => {
     const row: ReportToolRow = {
       name: t.toolName,
-      totalSpanCount: t.totalSpanCount,
       tokenShareLabel: `~${t.tokenShareEst.toLocaleString("en-US")}`,
+      totalSpanCount: t.totalSpanCount,
     };
-    if (t.mcpServer !== undefined) row.mcpServer = t.mcpServer;
+    if (t.mcpServer !== undefined) {
+      row.mcpServer = t.mcpServer;
+    }
     return row;
   });
 }
@@ -187,9 +199,9 @@ function buildToolRows(session: Session): ReportToolRow[] {
 function buildMcpServerRows(session: Session): ReportMcpServerRow[] {
   return byMcpServer(session).map((s) => ({
     mcpServer: s.mcpServer,
+    tokenShareLabel: `~${s.tokenShareEst.toLocaleString("en-US")}`,
     tools: s.tools,
     totalSpanCount: s.totalSpanCount,
-    tokenShareLabel: `~${s.tokenShareEst.toLocaleString("en-US")}`,
   }));
 }
 
@@ -205,8 +217,12 @@ function buildSpanRows(session: Session, turnNumber: number): ReportSpanRow[] {
       tokensLabel: span.tokensLabel,
       truncated: span.truncated,
     };
-    if (span.toolName !== undefined) row.toolName = span.toolName;
-    if (span.mcpServer !== undefined) row.mcpServer = span.mcpServer;
+    if (span.toolName !== undefined) {
+      row.toolName = span.toolName;
+    }
+    if (span.mcpServer !== undefined) {
+      row.mcpServer = span.mcpServer;
+    }
     return row;
   });
 }
@@ -220,7 +236,7 @@ function buildSpanRows(session: Session, turnNumber: number): ReportSpanRow[] {
 export function buildReportData(
   session: Session,
   generatedAt: Date,
-  peekVersion: string,
+  peekVersion: string
 ): ReportData {
   const totals = sessionTotals(session);
   const contextReport = buildContextReport(session);
@@ -228,13 +244,13 @@ export function buildReportData(
     .filter((turn) => turn.contextTotal > 0)
     .map((turn) => {
       const row: ReportCompositionTurn = {
-        turnNumber: turn.turnNumber,
-        role: turn.role,
-        model: turn.model,
-        contextTotal: turn.contextTotal,
         categories: turn.categories,
+        contextTotal: turn.contextTotal,
+        model: turn.model,
         residual: turn.residual,
+        role: turn.role,
         spans: buildSpanRows(session, turn.turnNumber),
+        turnNumber: turn.turnNumber,
       };
       if (turn.truncatedLabel !== undefined) {
         row.truncatedLabel = turn.truncatedLabel;
@@ -246,34 +262,34 @@ export function buildReportData(
   const durationMs = session.endedAt.getTime() - session.startedAt.getTime();
 
   return {
+    byMcpServer: buildMcpServerRows(session),
+    byModel: buildModelRows(session),
+    byTool: buildToolRows(session),
+    compactions: buildCompactionRows(session),
+    compositionTurns,
+    cwd: session.cwd,
+    durationLabel: formatDuration(durationMs),
+    endedAtISO: session.endedAt.toISOString(),
+    generatedAtISO: generatedAt.toISOString(),
     harness: session.harness,
     harnessVersion: session.harnessVersion,
-    sessionId: session.id,
-    cwd: session.cwd,
-    models: modelsUsed.length > 0 ? modelsUsed : [session.configSnapshot.model],
-    startedAtISO: session.startedAt.toISOString(),
-    endedAtISO: session.endedAt.toISOString(),
-    durationLabel: formatDuration(durationMs),
     headline: {
+      compactionCount: session.events.filter(isCompactionEvent).length,
       costLabel: totals.priced ? formatCost(totals.cost) : "unpriced",
       costPriced: totals.priced,
       tokens: {
-        inputUncached: totals.tokens.inputUncached,
         cacheRead: totals.tokens.cacheRead,
         cacheWrite: totals.tokens.cacheWrite5m + totals.tokens.cacheWrite1h,
+        inputUncached: totals.tokens.inputUncached,
         output: totals.tokens.output,
       },
       turnCount: session.turns.length,
-      compactionCount: session.events.filter(isCompactionEvent).length,
     },
-    compositionTurns,
-    residualLabel: RESIDUAL_LABEL,
-    compactions: buildCompactionRows(session),
-    byModel: buildModelRows(session),
-    byTool: buildToolRows(session),
-    byMcpServer: buildMcpServerRows(session),
-    generatedAtISO: generatedAt.toISOString(),
+    models: modelsUsed.length > 0 ? modelsUsed : [session.configSnapshot.model],
     peekVersion,
+    residualLabel: RESIDUAL_LABEL,
+    sessionId: session.id,
+    startedAtISO: session.startedAt.toISOString(),
   };
 }
 
@@ -282,10 +298,10 @@ export function buildReportData(
 // ---------------------------------------------------------------------------
 
 export interface ReportCommandOptions {
-  harness?: HarnessId;
   cwd?: string;
-  output?: string;
+  harness?: HarnessId;
   jsonEmbed?: boolean;
+  output?: string;
 }
 
 function readPeekVersion(): string {
@@ -294,7 +310,7 @@ function readPeekVersion(): string {
   // dist/cli.js — a fixed "../.." is wrong in exactly one of the two
   // layouts (it crashed the built `peek report` outside the repo).
   let dir = path.dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 4; i += 1) {
     const candidate = path.join(dir, "package.json");
     try {
       const pkg = JSON.parse(readFileSync(candidate, "utf8")) as {
@@ -330,11 +346,15 @@ function defaultDiffOutputPath(refA: SessionRef, refB: SessionRef): string {
 
 export async function runReportCommand(
   sessionIdOrPath: string | undefined,
-  options: ReportCommandOptions,
+  options: ReportCommandOptions
 ): Promise<void> {
   const resolveOpts: ResolveOptions = {};
-  if (options.harness !== undefined) resolveOpts.harness = options.harness;
-  if (options.cwd !== undefined) resolveOpts.cwd = options.cwd;
+  if (options.harness !== undefined) {
+    resolveOpts.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    resolveOpts.cwd = options.cwd;
+  }
   const ref = await resolveSession(sessionIdOrPath, resolveOpts);
   const { session } = await loadProcessedSession(ref);
   const priced = priceSession(session, { mode: "auto" });
@@ -359,8 +379,8 @@ export async function runReportCommand(
 // ---------------------------------------------------------------------------
 
 export interface ReportDiffCommandOptions {
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
   output?: string;
   /** Discovery root overrides — test-only escape hatch, same shape as
    * commands/shared.ts's ResolveOptions.roots. */
@@ -370,12 +390,18 @@ export interface ReportDiffCommandOptions {
 export async function runReportDiffCommand(
   a: string,
   b: string,
-  options: ReportDiffCommandOptions,
+  options: ReportDiffCommandOptions
 ): Promise<void> {
   const resolveOpts: ResolveOptions = {};
-  if (options.harness !== undefined) resolveOpts.harness = options.harness;
-  if (options.cwd !== undefined) resolveOpts.cwd = options.cwd;
-  if (options.roots !== undefined) resolveOpts.roots = options.roots;
+  if (options.harness !== undefined) {
+    resolveOpts.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    resolveOpts.cwd = options.cwd;
+  }
+  if (options.roots !== undefined) {
+    resolveOpts.roots = options.roots;
+  }
 
   const [refA, refB] = await Promise.all([
     resolveSessionRef(a, resolveOpts),
@@ -387,8 +413,8 @@ export async function runReportDiffCommand(
   ]);
   const report = buildDiffReport(diffSessions(sessionA, sessionB));
   const html = renderDiffHtml(report, {
-    peekVersion: readPeekVersion(),
     generatedAtISO: new Date().toISOString(),
+    peekVersion: readPeekVersion(),
   });
 
   const outputPath = options.output ?? defaultDiffOutputPath(refA, refB);
@@ -408,15 +434,15 @@ export async function runReportDiffCommand(
 // ---------------------------------------------------------------------------
 
 interface DashboardSessionRow {
-  harness: HarnessId;
-  cwd: string;
-  model: string;
-  startedAt: Date;
-  cost: number;
-  priced: boolean;
-  tokensTotal: number;
   compactionCount: number;
+  cost: number;
+  cwd: string;
+  harness: HarnessId;
+  model: string;
+  priced: boolean;
+  startedAt: Date;
   tokens: Record<DashboardTokenClass, number>;
+  tokensTotal: number;
 }
 
 /** Reads the fields this dashboard needs off a ListReportEntry — the same
@@ -424,46 +450,46 @@ interface DashboardSessionRow {
  * buildCachedListRow already branch on, since a cache hit never carries a
  * parsed Session. */
 function extractDashboardSessionRow(
-  entry: ListReportEntry,
+  entry: ListReportEntry
 ): DashboardSessionRow {
   if ("session" in entry) {
     const totals = sessionTotals(entry.session);
     return {
-      harness: entry.ref.harness,
-      cwd: entry.session.cwd,
-      model: entry.session.configSnapshot.model,
-      startedAt: entry.session.startedAt,
-      cost: totals.cost,
-      priced: totals.priced,
-      tokensTotal: totals.tokens.contextTotal,
       compactionCount: entry.session.events.filter(
-        (e) => e.kind === "compaction",
+        (e) => e.kind === "compaction"
       ).length,
+      cost: totals.cost,
+      cwd: entry.session.cwd,
+      harness: entry.ref.harness,
+      model: entry.session.configSnapshot.model,
+      priced: totals.priced,
+      startedAt: entry.session.startedAt,
       tokens: {
-        inputUncached: totals.tokens.inputUncached,
         cacheRead: totals.tokens.cacheRead,
         cacheWrite: totals.tokens.cacheWrite5m + totals.tokens.cacheWrite1h,
+        inputUncached: totals.tokens.inputUncached,
         output: totals.tokens.output,
       },
+      tokensTotal: totals.tokens.contextTotal,
     };
   }
   const row = entry.cached;
   return {
-    harness: entry.ref.harness,
-    cwd: row.cwd,
-    model: row.model,
-    startedAt: new Date(row.startedAt),
-    cost: row.totals.cost,
-    priced: row.totals.priced,
-    tokensTotal: row.totals.tokens.contextTotal,
     compactionCount: row.compactions,
+    cost: row.totals.cost,
+    cwd: row.cwd,
+    harness: entry.ref.harness,
+    model: row.model,
+    priced: row.totals.priced,
+    startedAt: new Date(row.startedAt),
     tokens: {
-      inputUncached: row.totals.tokens.inputUncached,
       cacheRead: row.totals.tokens.cacheRead,
       cacheWrite:
         row.totals.tokens.cacheWrite5m + row.totals.tokens.cacheWrite1h,
+      inputUncached: row.totals.tokens.inputUncached,
       output: row.totals.tokens.output,
     },
+    tokensTotal: row.totals.tokens.contextTotal,
   };
 }
 
@@ -482,9 +508,9 @@ const DASHBOARD_TOKEN_CLASSES: readonly DashboardTokenClass[] = [
 ];
 
 export interface BuildDashboardFilters {
-  since?: Date;
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
+  since?: Date;
 }
 
 /**
@@ -496,11 +522,12 @@ export interface BuildDashboardFilters {
  * uncapped. Headline/perProject/perHarness summarize the FULL entry set
  * regardless of the chart window.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Dashboard aggregation computes its related rollups in one deterministic pass.
 export function buildDashboardData(
   entries: readonly ListReportEntry[],
   filters: BuildDashboardFilters,
   generatedAt: Date,
-  peekVersion: string,
+  peekVersion: string
 ): DashboardData {
   const rows = entries.map(extractDashboardSessionRow);
 
@@ -508,16 +535,20 @@ export function buildDashboardData(
   let totalCost = 0;
   let unpricedSessionCount = 0;
   const totalTokens: Record<DashboardTokenClass, number> = {
-    inputUncached: 0,
     cacheRead: 0,
     cacheWrite: 0,
+    inputUncached: 0,
     output: 0,
   };
   const activeDaySet = new Set<string>();
   for (const r of rows) {
     totalCost += r.cost;
-    if (!r.priced) unpricedSessionCount++;
-    for (const tc of DASHBOARD_TOKEN_CLASSES) totalTokens[tc] += r.tokens[tc];
+    if (!r.priced) {
+      unpricedSessionCount += 1;
+    }
+    for (const tc of DASHBOARD_TOKEN_CLASSES) {
+      totalTokens[tc] += r.tokens[tc];
+    }
     activeDaySet.add(dayKeyUTC(r.startedAt));
   }
 
@@ -541,18 +572,22 @@ export function buildDashboardData(
 
   const modelSeriesNames = hasOther ? [...topModels, "other"] : topModels;
   const dailyCost: DashboardModelSeries[] = modelSeriesNames.map((model) => ({
-    model,
     costsByDay: new Array<number>(days.length).fill(0),
+    model,
   }));
   const dailyCostByModel = new Map(
-    dailyCost.map((s) => [s.model, s.costsByDay]),
+    dailyCost.map((s) => [s.model, s.costsByDay])
   );
   for (const r of windowRows) {
     const idx = dayIndex.get(dayKeyUTC(r.startedAt));
-    if (idx === undefined) continue;
+    if (idx === undefined) {
+      continue;
+    }
     const key = topModelSet.has(r.model) ? r.model : "other";
     const arr = dailyCostByModel.get(key);
-    if (arr) arr[idx] = (arr[idx] ?? 0) + r.cost;
+    if (arr) {
+      arr[idx] = (arr[idx] ?? 0) + r.cost;
+    }
   }
 
   // ---- dailyTokens: fixed 4-class stack ----
@@ -560,17 +595,21 @@ export function buildDashboardData(
     (tokenClass) => ({
       tokenClass,
       valuesByDay: new Array<number>(days.length).fill(0),
-    }),
+    })
   );
   const dailyTokensByClass = new Map(
-    dailyTokens.map((s) => [s.tokenClass, s.valuesByDay]),
+    dailyTokens.map((s) => [s.tokenClass, s.valuesByDay])
   );
   for (const r of windowRows) {
     const idx = dayIndex.get(dayKeyUTC(r.startedAt));
-    if (idx === undefined) continue;
+    if (idx === undefined) {
+      continue;
+    }
     for (const tc of DASHBOARD_TOKEN_CLASSES) {
       const arr = dailyTokensByClass.get(tc);
-      if (arr) arr[idx] = (arr[idx] ?? 0) + r.tokens[tc];
+      if (arr) {
+        arr[idx] = (arr[idx] ?? 0) + r.tokens[tc];
+      }
     }
   }
 
@@ -579,7 +618,9 @@ export function buildDashboardData(
   const denomByDay = new Array<number>(days.length).fill(0);
   for (const r of windowRows) {
     const idx = dayIndex.get(dayKeyUTC(r.startedAt));
-    if (idx === undefined) continue;
+    if (idx === undefined) {
+      continue;
+    }
     cacheReadByDay[idx] = (cacheReadByDay[idx] ?? 0) + r.tokens.cacheRead;
     denomByDay[idx] =
       (denomByDay[idx] ?? 0) +
@@ -596,74 +637,80 @@ export function buildDashboardData(
   const compactionCounts = new Array<number>(days.length).fill(0);
   for (const r of windowRows) {
     const idx = dayIndex.get(dayKeyUTC(r.startedAt));
-    if (idx === undefined) continue;
+    if (idx === undefined) {
+      continue;
+    }
     compactionCounts[idx] = (compactionCounts[idx] ?? 0) + r.compactionCount;
   }
 
   // ---- per-project (full entry set, top 15 by cost) ----
   interface ProjectAgg {
+    cost: number;
     cwd: string;
+    lastActivity: Date;
     sessions: number;
     tokens: number;
-    cost: number;
-    lastActivity: Date;
   }
   const projectAggs = new Map<string, ProjectAgg>();
   for (const r of rows) {
     const agg = projectAggs.get(r.cwd) ?? {
+      cost: 0,
       cwd: r.cwd,
+      lastActivity: r.startedAt,
       sessions: 0,
       tokens: 0,
-      cost: 0,
-      lastActivity: r.startedAt,
     };
-    agg.sessions++;
+    agg.sessions += 1;
     agg.tokens += r.tokensTotal;
     agg.cost += r.cost;
-    if (r.startedAt > agg.lastActivity) agg.lastActivity = r.startedAt;
+    if (r.startedAt > agg.lastActivity) {
+      agg.lastActivity = r.startedAt;
+    }
     projectAggs.set(r.cwd, agg);
   }
   const perProject: DashboardPerProjectRow[] = [...projectAggs.values()]
     .sort((a, b) => b.cost - a.cost)
     .slice(0, DASHBOARD_TOP_PROJECTS)
     .map((agg) => ({
+      costLabel: formatCost(agg.cost),
       cwdLabel: shortenCwd(agg.cwd),
+      lastActivityISO: agg.lastActivity.toISOString(),
       sessions: agg.sessions,
       tokens: agg.tokens,
-      costLabel: formatCost(agg.cost),
-      lastActivityISO: agg.lastActivity.toISOString(),
     }));
 
   // ---- per-harness (full entry set) ----
   interface HarnessAgg {
+    cost: number;
     harness: HarnessId;
     sessions: number;
     tokens: number;
-    cost: number;
     unpriced: number;
   }
   const harnessAggs = new Map<HarnessId, HarnessAgg>();
   for (const r of rows) {
     const agg = harnessAggs.get(r.harness) ?? {
+      cost: 0,
       harness: r.harness,
       sessions: 0,
       tokens: 0,
-      cost: 0,
       unpriced: 0,
     };
-    agg.sessions++;
+    agg.sessions += 1;
     agg.tokens += r.tokensTotal;
     agg.cost += r.cost;
-    if (!r.priced) agg.unpriced++;
+    if (!r.priced) {
+      agg.unpriced += 1;
+    }
     harnessAggs.set(r.harness, agg);
   }
   const perHarness: DashboardPerHarnessRow[] = [...harnessAggs.values()]
     .sort((a, b) => b.cost - a.cost)
     .map((agg) => ({
+      costLabel: formatCost(agg.cost),
       harness: agg.harness,
       sessions: agg.sessions,
       tokens: agg.tokens,
-      costLabel: formatCost(agg.cost),
       unpricedSessionCount: agg.unpriced,
     }));
 
@@ -671,27 +718,31 @@ export function buildDashboardData(
   if (filters.since !== undefined) {
     filtersOut.sinceISO = filters.since.toISOString();
   }
-  if (filters.harness !== undefined) filtersOut.harness = filters.harness;
-  if (filters.cwd !== undefined) filtersOut.cwd = filters.cwd;
+  if (filters.harness !== undefined) {
+    filtersOut.harness = filters.harness;
+  }
+  if (filters.cwd !== undefined) {
+    filtersOut.cwd = filters.cwd;
+  }
 
   return {
-    generatedAtISO: generatedAt.toISOString(),
-    peekVersion,
-    filters: filtersOut,
-    headline: {
-      totalCostLabel: formatCost(totalCost),
-      unpricedSessionCount,
-      totalSessions: rows.length,
-      totalTokens,
-      activeDays: activeDaySet.size,
-    },
-    days,
-    dailyCost,
-    dailyTokens,
     cacheHitRate,
     compactionCounts,
-    perProject,
+    dailyCost,
+    dailyTokens,
+    days,
+    filters: filtersOut,
+    generatedAtISO: generatedAt.toISOString(),
+    headline: {
+      activeDays: activeDaySet.size,
+      totalCostLabel: formatCost(totalCost),
+      totalSessions: rows.length,
+      totalTokens,
+      unpricedSessionCount,
+    },
+    peekVersion,
     perHarness,
+    perProject,
   };
 }
 
@@ -700,36 +751,50 @@ function defaultDashboardOutputPath(): string {
 }
 
 export interface ReportAllCommandOptions {
-  harness?: HarnessId;
   cwd?: string;
-  since?: Date;
+  harness?: HarnessId;
   output?: string;
   /** discovery-root test escape hatch, same shape as commands/list.ts's
    * ListCommandOptions.roots. Production callers omit this. */
   roots?: ListCommandOptions["roots"];
+  since?: Date;
 }
 
 export async function runReportAllCommand(
-  options: ReportAllCommandOptions,
+  options: ReportAllCommandOptions
 ): Promise<void> {
   const listOpts: ListCommandOptions = {};
-  if (options.harness !== undefined) listOpts.harness = options.harness;
-  if (options.cwd !== undefined) listOpts.cwd = options.cwd;
-  if (options.since !== undefined) listOpts.since = options.since;
-  if (options.roots !== undefined) listOpts.roots = options.roots;
+  if (options.harness !== undefined) {
+    listOpts.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    listOpts.cwd = options.cwd;
+  }
+  if (options.since !== undefined) {
+    listOpts.since = options.since;
+  }
+  if (options.roots !== undefined) {
+    listOpts.roots = options.roots;
+  }
 
   const { entries } = await loadEntries(listOpts);
 
   const filters: BuildDashboardFilters = {};
-  if (options.since !== undefined) filters.since = options.since;
-  if (options.harness !== undefined) filters.harness = options.harness;
-  if (options.cwd !== undefined) filters.cwd = options.cwd;
+  if (options.since !== undefined) {
+    filters.since = options.since;
+  }
+  if (options.harness !== undefined) {
+    filters.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    filters.cwd = options.cwd;
+  }
 
   const data = buildDashboardData(
     entries,
     filters,
     new Date(),
-    readPeekVersion(),
+    readPeekVersion()
   );
   const html = renderDashboardHtml(data);
 
@@ -752,43 +817,44 @@ export function registerReportCommand(program: Command): void {
     .description(
       "Generate a self-contained, shareable HTML report for a session " +
         "(inline CSS only, works offline). " +
-        "`--diff <a> <b>` renders a SessionDiff (see `peek diff`) as HTML instead.",
+        "`--diff <a> <b>` renders a SessionDiff (see `peek diff`) as HTML instead."
     )
     .option(
       "--diff",
-      "render a diff report: `peek report --diff <a> <b>` (sessionIdOrPath becomes <a>, diffB becomes <b>)",
+      "render a diff report: `peek report --diff <a> <b>` (sessionIdOrPath becomes <a>, diffB becomes <b>)"
     )
     .option(
       "--all",
-      "render a cross-session trends dashboard across ALL discovered sessions instead of a single-session report (ignores [sessionIdOrPath]/[diffB])",
+      "render a cross-session trends dashboard across ALL discovered sessions instead of a single-session report (ignores [sessionIdOrPath]/[diffB])"
     )
     .option(
       "--since <date>",
       "with --all, restrict to sessions modified on/after this date (YYYY-MM-DD or ISO); widens the dashboard's day-bucket window past the default trailing 30 days",
-      parseSinceOption,
+      parseSinceOption
     )
     .option(
       "--harness <harness>",
       "restrict to one harness: claude-code | codex | pi",
-      parseHarnessOption,
+      parseHarnessOption
     )
     .option(
       "--cwd <path>",
-      "restrict to sessions discovered from this working directory",
+      "restrict to sessions discovered from this working directory"
     )
     .option(
       "-o, --output <path>",
-      "output HTML file path (default: ./peek-report-<shortid>.html, ./peek-diff-<a>-<b>.html with --diff, or ./peek-dashboard.html with --all)",
+      "output HTML file path (default: ./peek-report-<shortid>.html, ./peek-diff-<a>-<b>.html with --diff, or ./peek-dashboard.html with --all)"
     )
     .option(
       "--json-embed",
-      'embed the full report data as JSON inside the HTML (non-executable <script type="application/json">) — ignored with --diff/--all',
+      'embed the full report data as JSON inside the HTML (non-executable <script type="application/json">) — ignored with --diff/--all'
     )
     .action(
       async (
         sessionIdOrPath: string | undefined,
         diffB: string | undefined,
-        opts,
+        opts
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mutually exclusive CLI report modes are validated and dispatched together.
       ) => {
         try {
           if (opts.all) {
@@ -796,8 +862,12 @@ export function registerReportCommand(program: Command): void {
             if (opts.harness !== undefined) {
               allOpts.harness = opts.harness as HarnessId;
             }
-            if (opts.cwd !== undefined) allOpts.cwd = opts.cwd as string;
-            if (opts.since !== undefined) allOpts.since = opts.since as Date;
+            if (opts.cwd !== undefined) {
+              allOpts.cwd = opts.cwd as string;
+            }
+            if (opts.since !== undefined) {
+              allOpts.since = opts.since as Date;
+            }
             if (opts.output !== undefined) {
               allOpts.output = opts.output as string;
             }
@@ -813,7 +883,9 @@ export function registerReportCommand(program: Command): void {
             if (opts.harness !== undefined) {
               diffOpts.harness = opts.harness as HarnessId;
             }
-            if (opts.cwd !== undefined) diffOpts.cwd = opts.cwd as string;
+            if (opts.cwd !== undefined) {
+              diffOpts.cwd = opts.cwd as string;
+            }
             if (opts.output !== undefined) {
               diffOpts.output = opts.output as string;
             }
@@ -827,17 +899,19 @@ export function registerReportCommand(program: Command): void {
           if (opts.harness !== undefined) {
             commandOpts.harness = opts.harness as HarnessId;
           }
-          if (opts.cwd !== undefined) commandOpts.cwd = opts.cwd as string;
+          if (opts.cwd !== undefined) {
+            commandOpts.cwd = opts.cwd as string;
+          }
           if (opts.output !== undefined) {
             commandOpts.output = opts.output as string;
           }
           await runReportCommand(sessionIdOrPath, commandOpts);
         } catch (err) {
           process.stderr.write(
-            `${err instanceof Error ? err.message : String(err)}\n`,
+            `${err instanceof Error ? err.message : String(err)}\n`
           );
           process.exitCode = 1;
         }
-      },
+      }
     );
 }

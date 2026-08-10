@@ -8,20 +8,20 @@
 export type HarnessId = "claude-code" | "codex" | "pi";
 
 export interface Adapter {
+  discover: (roots?: string[]) => Promise<SessionRef[]>;
   harness: HarnessId;
-  discover(roots?: string[]): Promise<SessionRef[]>;
-  parse(ref: SessionRef): Promise<ParseResult>;
+  parse: (ref: SessionRef) => Promise<ParseResult>;
 }
 
 export interface SessionRef {
+  cwd?: string;
   harness: HarnessId;
   id: string;
-  path: string;
-  cwd?: string;
-  sizeBytes: number;
-  mtime: Date;
   kind: "main" | "subagent";
+  mtime: Date;
   parentId?: string;
+  path: string;
+  sizeBytes: number;
 }
 
 export interface ParseResult {
@@ -31,8 +31,8 @@ export interface ParseResult {
 
 export interface ParseWarning {
   code: string;
-  message: string;
   line?: number;
+  message: string;
   recordType?: string;
 }
 // RULE: adapters NEVER throw on malformed/unknown records — warn and continue.
@@ -62,36 +62,29 @@ export interface Span {
   // audit R2-F1: the shared type 4 workers touch
   category: CompositionCategory;
   charCount: number; // over the SINGLE canonical source (see accounting rule 5)
-  text?: string; // omitted for large/offloaded content
-  truncated: boolean; // source was capped/offloaded → estimate is a lower bound
-  toolName?: string;
   mcpServer?: string; // set for toolResults/toolCallArgs spans
+  text?: string; // omitted for large/offloaded content
+  toolName?: string;
+  truncated: boolean; // source was capped/offloaded → estimate is a lower bound
   turnRole: TurnRole;
 }
 
 export interface CostBreakdown {
-  input: number;
-  output: number;
   cacheRead: number;
-  cacheWrite5m: number;
   cacheWrite1h: number;
-  total: number;
+  cacheWrite5m: number;
+  input: number;
   mode: "display" | "auto" | "calculate";
+  output: number;
   priced: boolean; // priced=false → unknown model, token-only
+  total: number;
 }
 
 export interface CompactionEvent {
-  kind: "compaction";
   at: Date;
-  turnIndex: number;
-  tokensBeforeExact: number | null; // last REAL usage total before the marker — skip zero-usage and
-  // isApiErrorMessage records when anchoring (audit R1-C2)
-  tokensAfterExact: number | null; // first real usage total after (INCLUDES the summary — it's cached as fresh input)
-  shrinkExact: number | null; // before − after. EXACT net context reduction; the headline number (audit R2-C1)
-  discardedEst: number | null; // before − after + summaryTokensEst. Estimated original content discarded
-  // (summary is NEW text inside `after`, so it adds back). Labeled estimate.
-  summaryTokensEst: number;
   cost?: CostBreakdown | null;
+  discardedEst: number | null; // before − after + summaryTokensEst. Estimated original content discarded
+  kind: "compaction";
   // codex-only (v2, Lane F3): window lineage from the `compacted` record's
   // window_number/window_id/previous_window_id/first_window_id fields (see
   // docs/recon/codex.md § "compacted records"). Undefined elsewhere/absent.
@@ -101,32 +94,39 @@ export interface CompactionEvent {
     previousWindowId?: string;
     firstWindowId?: string;
   };
+  shrinkExact: number | null; // before − after. EXACT net context reduction; the headline number (audit R2-C1)
+  // (summary is NEW text inside `after`, so it adds back). Labeled estimate.
+  summaryTokensEst: number;
+  // isApiErrorMessage records when anchoring (audit R1-C2)
+  tokensAfterExact: number | null; // first real usage total after (INCLUDES the summary — it's cached as fresh input)
+  tokensBeforeExact: number | null; // last REAL usage total before the marker — skip zero-usage and
+  turnIndex: number;
 }
 
 export interface SubagentSpawn {
-  kind: "subagentSpawn";
+  agentType?: string;
   at: Date;
   childRef: SessionRef;
-  agentType?: string;
+  kind: "subagentSpawn";
 }
 
 export interface ContextEdit {
-  kind: "contextEdit";
   at: Date;
+  kind: "contextEdit";
   raw: unknown; // applied_edits passthrough; populated shape unknown
 }
 
 export interface ModeChange {
-  kind: "modeChange";
   at: Date;
   field: string;
   from?: string;
+  kind: "modeChange";
   to: string;
 }
 
 export interface ErrorEvent {
-  kind: "error";
   at: Date;
+  kind: "error";
   message: string;
   raw?: unknown;
 }
@@ -139,26 +139,20 @@ export type SessionEvent =
   | ErrorEvent;
 
 export interface NormalizedUsage {
+  cacheRead: number;
+  cacheWrite1h: number;
+  cacheWrite5m: number;
   // ADDITIVE convention (Anthropic-style)
   inputUncached: number;
-  cacheRead: number;
-  cacheWrite5m: number;
-  cacheWrite1h: number;
   output: number;
-  reasoningOutput?: number;
   raw: unknown;
+  reasoningOutput?: number;
 }
 // Codex conversion (MEASURED 2026-08-08): inputUncached = input_tokens − cached_input_tokens;
 // cache_write_input_tokens absent → 0 (absent even on codex-cli 0.134.0).
 
 export interface Session {
-  harness: HarnessId;
-  harnessVersion: string;
-  id: string;
-  cwd: string;
-  gitBranch?: string;
-  startedAt: Date;
-  endedAt: Date;
+  children: SessionRef[];
   configSnapshot: {
     systemPrompt?: string;
     projectInstructions?: string;
@@ -166,22 +160,28 @@ export interface Session {
     model: string;
     modelChanges: ModeChange[];
   };
-  turns: Turn[];
+  cwd: string;
+  endedAt: Date;
   events: SessionEvent[];
-  children: SessionRef[];
+  gitBranch?: string;
+  harness: HarnessId;
+  harnessVersion: string;
+  id: string;
+  startedAt: Date;
+  turns: Turn[];
   warnings: ParseWarning[];
 }
 
 export interface Turn {
-  role: TurnRole;
-  model: string;
-  timestamp: Date;
-  contentSpans: Span[];
-  usage: NormalizedUsage;
-  contextTotal: number;
-  composition: Composition;
   cacheMissReason?: unknown;
+  composition: Composition;
+  contentSpans: Span[];
+  contextTotal: number;
   cost: CostBreakdown;
+  model: string;
+  role: TurnRole;
+  timestamp: Date;
+  usage: NormalizedUsage;
 }
 
 export interface Composition {

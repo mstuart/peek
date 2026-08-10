@@ -9,7 +9,7 @@
 
 import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { sessionTotals } from "../../src/engine/accounting.js";
@@ -20,19 +20,21 @@ import type { Session, SessionRef } from "../../src/model/types.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 
-async function refs(): Promise<SessionRef[]> {
+function refs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([FIXTURES_ROOT]);
 }
 
 function findRef(
   all: SessionRef[],
   versionDir: string,
-  id: string,
+  id: string
 ): SessionRef {
   const ref = all.find(
-    (r) => r.id === id && r.path.includes(`${sep}${versionDir}${sep}`),
+    (r) => r.id === id && r.path.includes(`${sep}${versionDir}${sep}`)
   );
-  if (!ref) throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  }
   return ref;
 }
 
@@ -42,12 +44,14 @@ async function loadRawFamily(): Promise<[Session, Session]> {
   const parentRef = findRef(
     all,
     "v2.1.225",
-    "20000000-2000-4200-8200-200000000001",
+    "20000000-2000-4200-8200-200000000001"
   );
   const { session: parentSession } = await parseClaudeSession(parentRef);
   expect(parentSession.children).toHaveLength(1);
-  const childRef = parentSession.children[0];
-  if (!childRef) throw new Error("unreachable");
+  const childRef = parentSession.children.at(0);
+  if (!childRef) {
+    throw new Error("unreachable");
+  }
   const { session: childSession } = await parseClaudeSession(childRef);
   return [parentSession, childSession];
 }
@@ -69,49 +73,56 @@ describe("dedupFamily — fixture family (parent + subagent replay)", () => {
       "msg-0001",
     ]);
 
-    const replay = child.turns[2];
-    const parentOriginal = parent.turns[0];
-    expect(replay?.usage.inputUncached).toBe(
-      parentOriginal?.usage.inputUncached,
-    );
-    expect(replay?.usage.cacheRead).toBe(parentOriginal?.usage.cacheRead);
-    expect(replay?.usage.output).toBe(parentOriginal?.usage.output);
+    const replay = child.turns.at(2);
+    const parentOriginal = parent.turns.at(0);
+    assert(replay);
+    assert(parentOriginal);
+    expect(replay.usage.inputUncached).toBe(parentOriginal.usage.inputUncached);
+    expect(replay.usage.cacheRead).toBe(parentOriginal.usage.cacheRead);
+    expect(replay.usage.output).toBe(parentOriginal.usage.output);
   });
 
   it("zeros the replayed child turn's usage/cost/contextTotal; leaves contentSpans and the parent's copy untouched", async () => {
     const [parent, child] = await loadRawFamily();
     const [dedupedParent, dedupedChild] = dedupFamily([parent, child]);
+    assert(dedupedParent);
+    assert(dedupedChild);
 
-    expect(dedupedParent?.turns).toHaveLength(2);
-    expect(dedupedParent?.turns[0]?.usage.inputUncached).toBe(1800);
-    expect(dedupedParent?.turns[0]?.usage.cacheRead).toBe(200);
-    expect(dedupedParent?.turns[0]?.usage.output).toBe(140);
-    expect(dedupedParent?.turns[0]?.contextTotal).toBe(2000);
+    expect(dedupedParent.turns).toHaveLength(2);
+    const parentTurn = dedupedParent.turns.at(0);
+    assert(parentTurn);
+    expect(parentTurn.usage.inputUncached).toBe(1800);
+    expect(parentTurn.usage.cacheRead).toBe(200);
+    expect(parentTurn.usage.output).toBe(140);
+    expect(parentTurn.contextTotal).toBe(2000);
 
-    expect(dedupedChild?.turns).toHaveLength(3);
-    const [subOne, subTwo, replay] = dedupedChild?.turns ?? [];
+    expect(dedupedChild.turns).toHaveLength(3);
+    const [subOne, subTwo, replay] = dedupedChild.turns;
+    assert(subOne);
+    assert(subTwo);
+    assert(replay);
 
     // Genuine child turns are untouched.
-    expect(subOne?.usage.inputUncached).toBe(600);
+    expect(subOne.usage.inputUncached).toBe(600);
     expect(subOne?.contextTotal).toBe(600);
-    expect(subTwo?.usage.inputUncached).toBe(750);
-    expect(subTwo?.usage.cacheRead).toBe(600);
+    expect(subTwo.usage.inputUncached).toBe(750);
+    expect(subTwo.usage.cacheRead).toBe(600);
     expect(subTwo?.contextTotal).toBe(1350);
 
     // The replay is zeroed, not removed (array length unchanged, above).
-    expect(replay?.usage.inputUncached).toBe(0);
-    expect(replay?.usage.cacheRead).toBe(0);
-    expect(replay?.usage.cacheWrite5m).toBe(0);
-    expect(replay?.usage.cacheWrite1h).toBe(0);
-    expect(replay?.usage.output).toBe(0);
+    expect(replay.usage.inputUncached).toBe(0);
+    expect(replay.usage.cacheRead).toBe(0);
+    expect(replay.usage.cacheWrite5m).toBe(0);
+    expect(replay.usage.cacheWrite1h).toBe(0);
+    expect(replay.usage.output).toBe(0);
     expect(replay?.contextTotal).toBe(0);
-    expect(replay?.cost.total).toBe(0);
-    expect(replay?.cost.priced).toBe(true); // forced true — a zeroed replay is not "unpriced" spend
+    expect(replay.cost.total).toBe(0);
+    expect(replay.cost.priced).toBe(true); // forced true — a zeroed replay is not "unpriced" spend
 
     // contentSpans (and raw.message.id) survive — this session's own,
     // non-family composition view still shows the turn's real shape.
-    expect(replay?.contentSpans.length).toBeGreaterThan(0);
-    const rawId = (replay?.usage.raw as { message: { id: string } }).message.id;
+    expect(replay.contentSpans.length).toBeGreaterThan(0);
+    const rawId = (replay.usage.raw as { message: { id: string } }).message.id;
     expect(rawId).toBe("msg-0001");
 
     // Events untouched.
@@ -121,7 +132,9 @@ describe("dedupFamily — fixture family (parent + subagent replay)", () => {
   it("family token totals count the parent's msg-0001 copy exactly once (exact arithmetic)", async () => {
     const [parent, child] = await loadRawFamily();
     const [dedupedParent, dedupedChild] = dedupFamily([parent, child]);
-    if (!dedupedParent || !dedupedChild) throw new Error("unreachable");
+    if (!(dedupedParent && dedupedChild)) {
+      throw new Error("unreachable");
+    }
 
     const parentTotals = sessionTotals(dedupedParent);
     const childTotals = sessionTotals(dedupedChild);
@@ -165,19 +178,32 @@ describe("dedupFamily — fixture family (parent + subagent replay)", () => {
 
     // Documented contract order: parent first. The parent's msg-0001 survives.
     const parentFirst = dedupFamily([parent, child]);
-    const parentFirstChild = parentFirst[1];
-    expect(parentFirstChild?.turns[2]?.usage.inputUncached).toBe(0); // child's replay zeroed
-    expect(parentFirst[0]?.turns[0]?.usage.inputUncached).toBe(1800); // parent's original kept
+    const parentFirstParent = parentFirst.at(0);
+    const parentFirstChild = parentFirst.at(1);
+    assert(parentFirstParent);
+    assert(parentFirstChild);
+    const parentOriginalTurn = parentFirstParent.turns.at(0);
+    const childReplayTurn = parentFirstChild.turns.at(2);
+    assert(parentOriginalTurn);
+    assert(childReplayTurn);
+    expect(childReplayTurn.usage.inputUncached).toBe(0); // child's replay zeroed
+    expect(parentOriginalTurn.usage.inputUncached).toBe(1800); // parent's original kept
 
     // Child-first (a caller contract violation): dedupFamily has no way to
     // tell this isn't the parent, so the FIRST array element still wins —
     // the child's replay copy becomes canonical and the parent's own
     // original a-0001 turn is what gets zeroed instead.
     const childFirst = dedupFamily([child, parent]);
-    const childFirstChild = childFirst[0];
-    const childFirstParent = childFirst[1];
-    expect(childFirstChild?.turns[2]?.usage.inputUncached).toBe(1800); // child's replay now kept
-    expect(childFirstParent?.turns[0]?.usage.inputUncached).toBe(0); // parent's original zeroed
+    const childFirstChild = childFirst.at(0);
+    const childFirstParent = childFirst.at(1);
+    assert(childFirstChild);
+    assert(childFirstParent);
+    const keptReplayTurn = childFirstChild.turns.at(2);
+    const zeroedOriginalTurn = childFirstParent.turns.at(0);
+    assert(keptReplayTurn);
+    assert(zeroedOriginalTurn);
+    expect(keptReplayTurn.usage.inputUncached).toBe(1800); // child's replay now kept
+    expect(zeroedOriginalTurn.usage.inputUncached).toBe(0); // parent's original zeroed
   });
 });
 
