@@ -44,10 +44,10 @@ const KNOWN_LINE_TYPES: ReadonlySet<string> = new Set([
  * number for diagnostics.
  */
 export interface RawCodexRecord {
+  line: number;
+  payload: unknown;
   timestamp?: Date;
   type: string;
-  payload: unknown;
-  line: number;
 }
 
 export interface ReadRecordsResult {
@@ -56,7 +56,9 @@ export interface ReadRecordsResult {
 }
 
 function parseTimestamp(value: unknown): Date | undefined {
-  if (typeof value !== "string") return undefined;
+  if (typeof value !== "string") {
+    return;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
@@ -73,21 +75,23 @@ function parseTimestamp(value: unknown): Date | undefined {
  * rejects; malformed content never does.
  */
 export async function readCodexRecords(
-  filePath: string,
+  filePath: string
 ): Promise<ReadRecordsResult> {
   const warnings: ParseWarning[] = [];
   const records: RawCodexRecord[] = [];
 
   const rl = createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
     crlfDelay: Number.POSITIVE_INFINITY,
+    input: createReadStream(filePath, { encoding: "utf8" }),
   });
 
   let lineNo = 0;
   for await (const line of rl) {
-    lineNo++;
+    lineNo += 1;
     const trimmed = line.trim();
-    if (trimmed === "") continue;
+    if (trimmed === "") {
+      continue;
+    }
 
     let parsed: unknown;
     try {
@@ -95,8 +99,8 @@ export async function readCodexRecords(
     } catch {
       warnings.push({
         code: "malformed-line",
-        message: `line ${lineNo}: invalid JSON`,
         line: lineNo,
+        message: `line ${lineNo}: invalid JSON`,
       });
       continue;
     }
@@ -108,8 +112,8 @@ export async function readCodexRecords(
     ) {
       warnings.push({
         code: "malformed-line",
-        message: `line ${lineNo}: not a JSON object`,
         line: lineNo,
+        message: `line ${lineNo}: not a JSON object`,
       });
       continue;
     }
@@ -120,20 +124,20 @@ export async function readCodexRecords(
     if (!KNOWN_LINE_TYPES.has(type)) {
       warnings.push({
         code: "unknown-record-type",
+        line: lineNo,
         message: `line ${lineNo}: unrecognized record type ${
           type ? `"${type}"` : "(missing)"
         }`,
-        line: lineNo,
         ...(type ? { recordType: type } : {}),
       });
     }
 
     const timestamp = parseTimestamp(record.timestamp);
     records.push({
-      ...(timestamp !== undefined ? { timestamp } : {}),
-      type,
-      payload: record.payload,
+      ...(timestamp === undefined ? {} : { timestamp }),
       line: lineNo,
+      payload: record.payload,
+      type,
     });
   }
 
@@ -146,15 +150,18 @@ export async function readCodexRecords(
  * through meta.ts's full extraction.
  */
 export function extractCliVersion(
-  records: RawCodexRecord[],
+  records: RawCodexRecord[]
 ): string | undefined {
   for (const record of records) {
-    if (record.type !== "session_meta") continue;
+    if (record.type !== "session_meta") {
+      continue;
+    }
     if (typeof record.payload !== "object" || record.payload === null) {
       continue;
     }
     const version = (record.payload as Record<string, unknown>).cli_version;
-    if (typeof version === "string" && version.length > 0) return version;
+    if (typeof version === "string" && version.length > 0) {
+      return version;
+    }
   }
-  return undefined;
 }

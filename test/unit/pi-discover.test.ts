@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverPiSessions } from "../../src/adapters/pi/discover.js";
 import {
   activeLeaf,
@@ -90,23 +90,29 @@ describe("parsePiEntryTree — System A", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE1_MAIN));
     const result = parsePiEntryTree(lines);
     expect(result.systemB).toBe(false);
-    if (result.systemB) throw new Error("unreachable");
-    expect(result.tree).not.toBeNull();
-    expect(result.tree?.header.id).toBe("cb5b132f-2542-40b3-a7c9-49ffc431e30b");
-    expect(result.tree?.header.cwd).toBe("/Users/fake/project");
-    expect(result.tree?.entries.get("e1000002")?.parentId).toBe("e1000001");
+    if (result.systemB) {
+      throw new Error("unreachable");
+    }
+    assert(result.tree);
+    expect(result.tree.header.id).toBe("cb5b132f-2542-40b3-a7c9-49ffc431e30b");
+    expect(result.tree.header.cwd).toBe("/Users/fake/project");
+    expect(result.tree.entries.get("e1000002")?.parentId).toBe("e1000001");
     expect(result.warnings).toEqual([]);
   });
 
   it("reconstructs the branched tree: two children of b1000002, active leaf b1000005", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE2_BRANCHED));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     const children = [...result.tree.entries.values()].filter(
-      (e) => e.parentId === "b1000002",
+      (e) => e.parentId === "b1000002"
     );
-    expect(children.map((e) => e.id).sort()).toEqual(["b1000003", "b1000004"]);
+    expect(
+      children.map((e) => e.id).sort((left, right) => left.localeCompare(right))
+    ).toEqual(["b1000003", "b1000004"]);
 
     expect(activeLeaf(result.tree.entries)).toBe("b1000005");
   });
@@ -114,7 +120,9 @@ describe("parsePiEntryTree — System A", () => {
   it("pathToRoot from the active leaf crosses the branch point via b1000004, not b1000003", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE2_BRANCHED));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     const leaf = activeLeaf(result.tree.entries);
     expect(leaf).toBeDefined();
@@ -126,7 +134,9 @@ describe("parsePiEntryTree — System A", () => {
   it("walks past a mid-tree compaction entry without breaking the parent chain", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE3_COMPACTION));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     const leaf = activeLeaf(result.tree.entries);
     expect(leaf).toBe("c1000007");
@@ -145,7 +155,9 @@ describe("parsePiEntryTree — System A", () => {
   it("links misc entry types (branch_summary/custom/custom_message/label/session_info) into the tree", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE4_MISC));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     expect(result.tree.entries.get("d1000003")?.type).toBe("branch_summary");
     expect(result.tree.entries.get("d1000004")?.type).toBe("custom");
@@ -157,14 +169,16 @@ describe("parsePiEntryTree — System A", () => {
   it("warns (not throws) on an unknown entry type and still links it into the tree", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE4_MISC));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     const unknown = result.tree.entries.get("d1000008");
     expect(unknown?.type).toBe("future_entry");
     expect(activeLeaf(result.tree.entries)).toBe("d1000008");
 
     const warning = result.warnings.find(
-      (w) => w.code === "pi-unknown-entry-type",
+      (w) => w.code === "pi-unknown-entry-type"
     );
     expect(warning).toBeDefined();
     expect(warning?.recordType).toBe("future_entry");
@@ -173,10 +187,12 @@ describe("parsePiEntryTree — System A", () => {
   it("carries parentSession through on the forked session header", () => {
     const lines = readLines(join(SYSTEM_A_DIR, CASE5_FORKED));
     const result = parsePiEntryTree(lines);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
 
     expect(result.tree.header.parentSession).toContain(
-      "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+      "cb5b132f-2542-40b3-a7c9-49ffc431e30b"
     );
   });
 });
@@ -199,7 +215,9 @@ describe("parsePiEntryTree — malformed input", () => {
   it("warns and returns a null tree for an empty file", () => {
     const result = parsePiEntryTree([]);
     expect(result.systemB).toBe(false);
-    if (result.systemB) throw new Error("unreachable");
+    if (result.systemB) {
+      throw new Error("unreachable");
+    }
     expect(result.tree).toBeNull();
     expect(result.warnings).toHaveLength(1);
   });
@@ -212,10 +230,12 @@ describe("parsePiEntryTree — malformed input", () => {
       "not valid json",
       '{"type":"message","id":"z2","parentId":"z1","timestamp":"2026-08-01T00:00:01.000Z"}',
     ]);
-    if (result.systemB || !result.tree) throw new Error("expected a tree");
+    if (result.systemB || !result.tree) {
+      throw new Error("expected a tree");
+    }
     expect(result.tree.entries.size).toBe(2);
     expect(result.warnings.some((w) => w.code === "pi-malformed-entry")).toBe(
-      true,
+      true
     );
   });
 });

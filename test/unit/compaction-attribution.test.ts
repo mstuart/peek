@@ -6,12 +6,12 @@ import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { parsePiSession } from "../../src/adapters/pi/parse.js";
 import { priceSession } from "../../src/engine/accounting.js";
 import {
-  UNATTRIBUTED_TOOL,
   byMcpServer,
   byModel,
   bySubagent,
   byTool,
   cacheAnalysis,
+  UNATTRIBUTED_TOOL,
 } from "../../src/engine/attribution.js";
 import {
   computeCompactionDeltas,
@@ -35,13 +35,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 const PI_FIXTURES_ROOT = join(__dirname, "../fixtures/pi");
 
-async function claudeRefs(): Promise<SessionRef[]> {
+function claudeRefs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
 }
 
 function findClaudeRef(all: SessionRef[], fixtureName: string): SessionRef {
   const ref = all.find((r) => r.path.endsWith(`${fixtureName}.jsonl`));
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureName}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureName}`);
+  }
   return ref;
 }
 
@@ -55,14 +57,14 @@ function piRef(id: string, filename: string): SessionRef {
   return {
     harness: "pi",
     id,
+    kind: "main",
+    mtime: new Date(0),
     path: join(
       PI_FIXTURES_ROOT,
       "system-a-v3/--Users-fake-project--",
-      filename,
+      filename
     ),
     sizeBytes: 0,
-    mtime: new Date(0),
-    kind: "main",
   };
 }
 
@@ -75,7 +77,7 @@ describe("computeCompactionDeltas — PLAN worked example", () => {
     const { shrinkExact, discardedEst } = computeCompactionDeltas(
       844_000,
       54_437,
-      30_581,
+      30_581
     );
     expect(shrinkExact).toBe(789_563);
     expect(discardedEst).toBe(820_144);
@@ -87,7 +89,7 @@ describe("computeCompactionDeltas — PLAN worked example", () => {
     const { shrinkExact, discardedEst } = computeCompactionDeltas(
       1000,
       1000,
-      1000,
+      1000
     );
     expect(shrinkExact).toBe(0);
     expect(discardedEst).toBe(1000); // full original size
@@ -95,16 +97,16 @@ describe("computeCompactionDeltas — PLAN worked example", () => {
 
   it("null propagation: either side unknown -> both deltas null", () => {
     expect(computeCompactionDeltas(null, 100, 10)).toEqual({
-      shrinkExact: null,
       discardedEst: null,
+      shrinkExact: null,
     });
     expect(computeCompactionDeltas(100, null, 10)).toEqual({
-      shrinkExact: null,
       discardedEst: null,
+      shrinkExact: null,
     });
     expect(computeCompactionDeltas(null, null, 10)).toEqual({
-      shrinkExact: null,
       discardedEst: null,
+      shrinkExact: null,
     });
   });
 });
@@ -115,42 +117,42 @@ describe("computeCompactionDeltas — PLAN worked example", () => {
 
 function turnWithContext(contextTotal: number): Turn {
   return {
-    role: "assistant",
-    model: "m",
-    timestamp: new Date(0),
-    contentSpans: [],
-    usage: {
-      inputUncached: 0,
-      cacheRead: 0,
-      cacheWrite5m: 0,
-      cacheWrite1h: 0,
-      output: 0,
-      raw: undefined,
-    },
-    contextTotal,
     composition: {
       categories: {} as Record<CompositionCategory, number>,
       residual: 0,
       residualShare: 0,
       truncated: false,
     },
+    contentSpans: [],
+    contextTotal,
     cost: {
-      input: 0,
-      output: 0,
       cacheRead: 0,
-      cacheWrite5m: 0,
       cacheWrite1h: 0,
-      total: 0,
+      cacheWrite5m: 0,
+      input: 0,
       mode: "auto",
+      output: 0,
       priced: false,
+      total: 0,
+    },
+    model: "m",
+    role: "assistant",
+    timestamp: new Date(0),
+    usage: {
+      cacheRead: 0,
+      cacheWrite1h: 0,
+      cacheWrite5m: 0,
+      inputUncached: 0,
+      output: 0,
+      raw: undefined,
     },
   };
 }
 
 describe("findTokensBefore / findTokensAfter", () => {
   it("findTokensBefore skips a zero-usage turn and returns the nearest non-zero turn strictly before the index", () => {
-    const turns = [turnWithContext(20000), turnWithContext(0)];
-    expect(findTokensBefore(turns, 2)).toBe(20000);
+    const turns = [turnWithContext(20_000), turnWithContext(0)];
+    expect(findTokensBefore(turns, 2)).toBe(20_000);
   });
 
   it("findTokensAfter is inclusive of fromIndex and skips zero-usage turns", () => {
@@ -180,16 +182,16 @@ describe("finalizeCompactions — claude-code compaction fixture", () => {
     const session = await dedupedClaudeSession("compaction");
     const finalized = finalizeCompactions(session);
     const event = finalized.events.find(
-      (e): e is CompactionEvent => e.kind === "compaction",
+      (e): e is CompactionEvent => e.kind === "compaction"
     );
     expect(event).toBeDefined();
 
     // F2-trap: the adjacent isApiErrorMessage record is all-zero usage; the
     // real prior turn (20000) must be what tokensBeforeExact anchors to.
-    expect(event?.tokensBeforeExact).toBe(20000);
+    expect(event?.tokensBeforeExact).toBe(20_000);
     expect(event?.tokensAfterExact).toBe(3000);
-    expect(event?.shrinkExact).toBe(17000);
-    expect(event?.discardedEst).toBe(17040); // 17000 + summaryTokensEst(40)
+    expect(event?.shrinkExact).toBe(17_000);
+    expect(event?.discardedEst).toBe(17_040); // 17000 + summaryTokensEst(40)
     expect(event?.summaryTokensEst).toBe(40);
 
     // Idempotence: a second pass changes nothing.
@@ -208,7 +210,7 @@ describe("finalizeCompactions — pi compaction fixture", () => {
   it("fills tokensAfterExact from the first post-compaction turn with non-zero contextTotal, and computes shrink/discarded", async () => {
     const ref = piRef(
       "6d816cb4-9915-4741-9571-a436e36f68c5",
-      "2026-08-01T12-45-00-000Z_6d816cb4-9915-4741-9571-a436e36f68c5.jsonl",
+      "2026-08-01T12-45-00-000Z_6d816cb4-9915-4741-9571-a436e36f68c5.jsonl"
     );
     const { session } = await parsePiSession(ref);
     const deduped = { ...session, turns: dedupTurns(session.turns) };
@@ -221,7 +223,7 @@ describe("finalizeCompactions — pi compaction fixture", () => {
 
     const finalized = finalizeCompactions(deduped);
     const event = finalized.events.find(
-      (e): e is CompactionEvent => e.kind === "compaction",
+      (e): e is CompactionEvent => e.kind === "compaction"
     );
     expect(event).toBeDefined();
 
@@ -246,19 +248,19 @@ describe("finalizeCompactions — pi compaction fixture", () => {
 describe("finalizeCompactionEvent — never overwrites non-null adapter-computed values", () => {
   it("does not recompute shrinkExact/discardedEst once set, even if the anchor search would find different numbers", () => {
     const event: CompactionEvent = {
-      kind: "compaction",
       at: new Date(0),
-      turnIndex: 1,
-      tokensBeforeExact: 100,
-      tokensAfterExact: 10,
-      shrinkExact: 90,
-      discardedEst: 95,
-      summaryTokensEst: 5,
       cost: null,
+      discardedEst: 95,
+      kind: "compaction",
+      shrinkExact: 90,
+      summaryTokensEst: 5,
+      tokensAfterExact: 10,
+      tokensBeforeExact: 100,
+      turnIndex: 1,
     };
     // A turns[] whose anchoring would produce completely different numbers
     // if this function recomputed instead of trusting the adapter.
-    const turns = [turnWithContext(999999), turnWithContext(1)];
+    const turns = [turnWithContext(999_999), turnWithContext(1)];
     const result = finalizeCompactionEvent(event, turns);
     expect(result).toEqual(event);
   });
@@ -275,19 +277,19 @@ describe("byModel", () => {
     const rollup = byModel(priced);
 
     expect(rollup).toHaveLength(1);
-    const entry = rollup[0];
+    const entry = rollup.at(0);
     expect(entry?.model).toBe("claude-opus-5");
     expect(entry?.turnCount).toBe(2);
     // Sums over both assistant turns' usage (verified against the fixture's
     // raw usage fields): turn1 input 50 + cacheRead 200 + cacheWrite5m 500 +
     // cacheWrite1h 1000; turn2 input 300 + cacheWrite5m 900.
     expect(entry?.tokens).toEqual({
-      inputUncached: 350,
       cacheRead: 200,
-      cacheWrite5m: 1400,
       cacheWrite1h: 1000,
-      output: 200,
+      cacheWrite5m: 1400,
       contextTotal: 2950,
+      inputUncached: 350,
+      output: 200,
     });
     expect(entry?.priced).toBe(true);
     expect(entry?.cost).toBeGreaterThan(0);
@@ -299,7 +301,7 @@ describe("byModel", () => {
     const mixed: Session = {
       ...session,
       turns: session.turns.map((t, i) =>
-        i === 0 ? { ...t, model: "z-model" } : t,
+        i === 0 ? { ...t, model: "z-model" } : t
       ),
     };
     const priced = priceSession(mixed, { mode: "auto" });
@@ -352,10 +354,11 @@ describe("byTool / byMcpServer — tool-use-names fixture", () => {
     const session = await dedupedClaudeSession("tool-use-names");
     const servers = byMcpServer(session);
 
-    expect(servers.map((s) => s.mcpServer).sort()).toEqual([
-      "github",
-      "plugin_acme-tools_linter",
-    ]);
+    expect(
+      servers
+        .map((s) => s.mcpServer)
+        .sort((left, right) => left.localeCompare(right))
+    ).toEqual(["github", "plugin_acme-tools_linter"]);
     const github = servers.find((s) => s.mcpServer === "github");
     expect(github?.tools).toEqual(["get_issue"]);
     // 1 toolCallArgs + 1 toolResults, now that toolResults spans are linked
@@ -364,7 +367,7 @@ describe("byTool / byMcpServer — tool-use-names fixture", () => {
 
     const totalServerSpans = servers.reduce(
       (sum, s) => sum + s.totalSpanCount,
-      0,
+      0
     );
     expect(totalServerSpans).toBe(4); // 1 call + 1 result each for github + the linter server
   });
@@ -383,8 +386,8 @@ describe("cacheAnalysis", () => {
     // turn2: cacheWrite5m 900, inputUncached 300
     expect(analysis.totals).toEqual({
       cacheRead: 200,
-      cacheWrite5m: 1400,
       cacheWrite1h: 1000,
+      cacheWrite5m: 1400,
       inputUncached: 350,
     });
     const denominator = 200 + 350 + 1400 + 1000;
@@ -397,7 +400,7 @@ describe("cacheAnalysis", () => {
     const analysis = cacheAnalysis(session);
 
     expect(analysis.missReasons).toHaveLength(1);
-    const entry = analysis.missReasons[0];
+    const entry = analysis.missReasons.at(0);
     expect(entry?.type).toBe("system_changed");
     // The fixture's diagnostics.cache_miss_reason.cache_missed_input_tokens value.
     expect(entry?.cacheMissedInputTokens).toBe(4500);
@@ -406,16 +409,16 @@ describe("cacheAnalysis", () => {
 
   it("hitRate is 0 (not NaN) when the denominator is 0", () => {
     const emptySession: Session = {
+      children: [],
+      configSnapshot: { model: "m", modelChanges: [] },
+      cwd: "/",
+      endedAt: new Date(0),
+      events: [],
       harness: "claude-code",
       harnessVersion: "test",
       id: "empty",
-      cwd: "/",
       startedAt: new Date(0),
-      endedAt: new Date(0),
-      configSnapshot: { model: "m", modelChanges: [] },
       turns: [],
-      events: [],
-      children: [],
       warnings: [],
     };
     const analysis = cacheAnalysis(emptySession);
@@ -431,16 +434,16 @@ describe("cacheAnalysis", () => {
 function zeroComposition(): Composition {
   return {
     categories: {
-      userText: 0,
       assistantText: 0,
-      thinking: 0,
-      toolResults: 0,
-      toolCallArgs: 0,
-      instructionInjection: 0,
-      systemPrompt: 0,
-      toolSchemas: 0,
       compactionSummaries: 0,
       coordination: 0,
+      instructionInjection: 0,
+      systemPrompt: 0,
+      thinking: 0,
+      toolCallArgs: 0,
+      toolResults: 0,
+      toolSchemas: 0,
+      userText: 0,
     },
     residual: 0,
     residualShare: 0,
@@ -450,50 +453,50 @@ function zeroComposition(): Composition {
 
 function pricedCost(total: number): CostBreakdown {
   return {
-    input: total,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total,
+    cacheWrite5m: 0,
+    input: total,
     mode: "calculate",
+    output: 0,
     priced: true,
+    total,
   };
 }
 
 function simpleSession(
   id: string,
   contextTotal: number,
-  cost: number,
+  cost: number
 ): Session {
   const turn: Turn = {
-    role: "assistant",
-    model: "m",
-    timestamp: new Date(0),
+    composition: zeroComposition(),
     contentSpans: [],
+    contextTotal,
+    cost: pricedCost(cost),
+    model: "m",
+    role: "assistant",
+    timestamp: new Date(0),
     usage: {
-      inputUncached: contextTotal,
       cacheRead: 0,
-      cacheWrite5m: 0,
       cacheWrite1h: 0,
+      cacheWrite5m: 0,
+      inputUncached: contextTotal,
       output: 0,
       raw: undefined,
     },
-    contextTotal,
-    composition: zeroComposition(),
-    cost: pricedCost(cost),
   };
   return {
+    children: [],
+    configSnapshot: { model: "m", modelChanges: [] },
+    cwd: "/",
+    endedAt: new Date(0),
+    events: [],
     harness: "claude-code",
     harnessVersion: "test",
     id,
-    cwd: "/",
     startedAt: new Date(0),
-    endedAt: new Date(0),
-    configSnapshot: { model: "m", modelChanges: [] },
     turns: [turn],
-    events: [],
-    children: [],
     warnings: [],
   };
 }

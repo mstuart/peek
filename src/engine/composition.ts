@@ -61,7 +61,9 @@ const COMPOSITION_CATEGORIES: readonly CompositionCategory[] = [
 
 function zeroCategories(): Record<CompositionCategory, number> {
   const categories = {} as Record<CompositionCategory, number>;
-  for (const category of COMPOSITION_CATEGORIES) categories[category] = 0;
+  for (const category of COMPOSITION_CATEGORIES) {
+    categories[category] = 0;
+  }
   return categories;
 }
 
@@ -120,7 +122,7 @@ export interface CompositionAccumulatorState {
  * "exactly one source" rule for tool results.
  */
 export function initCompositionAccumulator(
-  configSnapshot?: Session["configSnapshot"],
+  configSnapshot?: Session["configSnapshot"]
 ): CompositionAccumulatorState {
   const runningChars = zeroCategories();
   if (configSnapshot?.systemPrompt) {
@@ -149,15 +151,21 @@ export function initCompositionAccumulator(
 export function accumulateTurnComposition(
   state: CompositionAccumulatorState,
   turn: Pick<Turn, "contentSpans" | "contextTotal">,
-  harness: HarnessId,
+  harness: HarnessId
 ): Composition {
   for (const span of turn.contentSpans) {
-    if (span.category === "thinking" && harness !== "codex") continue;
+    if (span.category === "thinking" && harness !== "codex") {
+      continue;
+    }
     state.runningChars[span.category] += span.charCount;
-    if (span.truncated) state.truncatedSoFar = true;
+    if (span.truncated) {
+      state.truncatedSoFar = true;
+    }
   }
 
-  if (turn.contextTotal === 0) return zeroComposition();
+  if (turn.contextTotal === 0) {
+    return zeroComposition();
+  }
 
   const categories = {} as Record<CompositionCategory, number>;
   let sum = 0;
@@ -192,7 +200,7 @@ export function computeComposition(session: Session): Session {
   const resetAt = new Set(
     session.events
       .filter((event) => event.kind === "compaction")
-      .map((event) => event.turnIndex),
+      .map((event) => event.turnIndex)
   );
 
   let state = initCompositionAccumulator(session.configSnapshot);

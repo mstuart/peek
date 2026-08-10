@@ -28,8 +28,12 @@ export function shortenCwd(cwd: string, maxLen = 40): string {
   const withHome = cwd.startsWith(CWD_HOME)
     ? `~${cwd.slice(CWD_HOME.length)}`
     : cwd;
-  if (withHome.length <= maxLen) return withHome;
+  if (withHome.length <= maxLen) {
+    return withHome;
+  }
   const parts = withHome.split("/");
-  if (parts.length <= 3) return withHome;
+  if (parts.length <= 3) {
+    return withHome;
+  }
   return `${parts[0]}/…/${parts.slice(-2).join("/")}`;
 }

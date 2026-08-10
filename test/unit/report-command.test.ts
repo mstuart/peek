@@ -22,6 +22,10 @@ import { diffSessions } from "../../src/engine/diff.js";
 import type { Session } from "../../src/model/types.js";
 import { renderDiffHtml, renderReportHtml } from "../../src/render/html.js";
 
+const TEST_PATTERN_1 =
+  /<script type="application\/json" id="peek-report-data">([\s\S]*?)<\/script>/;
+const TEST_PATTERN_2 = /get_issue[\s\S]{0,80}\$\d/;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
@@ -29,7 +33,9 @@ const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
 async function processedClaudeSession(fixtureName: string): Promise<Session> {
   const refs = await discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.path.endsWith(`${fixtureName}.jsonl`));
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureName}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureName}`);
+  }
   const { session } = await parseClaudeSession(ref);
   const deduped: Session = { ...session, turns: dedupTurns(session.turns) };
   const finalized = finalizeCompactions(computeComposition(deduped));
@@ -39,7 +45,9 @@ async function processedClaudeSession(fixtureName: string): Promise<Session> {
 async function processedCodexSession(fixtureId: string): Promise<Session> {
   const refs = await discoverCodexSessions([CODEX_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.id === fixtureId);
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureId}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureId}`);
+  }
   const { session } = await parseCodexSession(ref);
   const deduped: Session = { ...session, turns: dedupTurns(session.turns) };
   const finalized = finalizeCompactions(computeComposition(deduped));
@@ -72,7 +80,7 @@ describe("renderReportHtml — claude compaction fixture", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data);
 
@@ -117,7 +125,7 @@ describe("renderReportHtml — codex full-turn fixture", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data);
 
@@ -154,7 +162,7 @@ describe("renderReportHtml — codex full-turn fixture", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data, { jsonEmbed: true });
 
@@ -175,7 +183,7 @@ describe("buildReportData", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     expect(data.headline.turnCount).toBe(session.turns.length);
     expect(data.headline.compactionCount).toBe(1);
@@ -187,7 +195,7 @@ describe("buildReportData", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     expect(data.compositionTurns.every((t) => t.contextTotal > 0)).toBe(true);
     expect(data.compositionTurns.length).toBe(usageCarryingTurnCount(session));
@@ -198,7 +206,7 @@ describe("buildReportData", () => {
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const allSpans = data.compositionTurns.flatMap((t) => t.spans);
     expect(allSpans.length).toBeGreaterThan(0);
@@ -206,7 +214,7 @@ describe("buildReportData", () => {
       expect(Object.keys(span).sort()).toEqual(
         ["category", "mcpServer", "toolName", "tokensLabel", "truncated"]
           .filter((k) => k in span)
-          .sort(),
+          .sort((left, right) => left.localeCompare(right))
       );
       expect(span).not.toHaveProperty("text");
       if (span.tokensLabel !== undefined) {
@@ -215,11 +223,11 @@ describe("buildReportData", () => {
     }
 
     const getIssueArgs = allSpans.find(
-      (s) => s.toolName === "get_issue" && s.category === "toolCallArgs",
+      (s) => s.toolName === "get_issue" && s.category === "toolCallArgs"
     );
     expect(getIssueArgs?.mcpServer).toBe("github");
     const runLintArgs = allSpans.find(
-      (s) => s.toolName === "run_lint" && s.category === "toolCallArgs",
+      (s) => s.toolName === "run_lint" && s.category === "toolCallArgs"
     );
     expect(runLintArgs?.mcpServer).toBe("plugin_acme-tools_linter");
   });
@@ -235,7 +243,7 @@ describe("renderReportHtml — cost attribution tables (tool-use-names fixture)"
     const data = buildReportData(
       session,
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data);
 
@@ -261,7 +269,7 @@ describe("renderReportHtml — cost attribution tables (tool-use-names fixture)"
     expect(html).toContain("plugin_acme-tools_linter");
 
     // Honesty convention: never a per-tool/per-server dollar figure.
-    expect(html).not.toMatch(/get_issue[\s\S]{0,80}\$\d/);
+    expect(html).not.toMatch(TEST_PATTERN_2);
 
     // Fixture message content NEVER lands in the HTML (this fixture's
     // tool_result payloads carry JSON strings, not prose, but the prompt
@@ -278,14 +286,18 @@ describe("renderReportHtml — cost attribution tables (tool-use-names fixture)"
 async function loadDiffFixtureClaude(fixtureName: string): Promise<Session> {
   const refs = await discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.path.endsWith(`${fixtureName}.jsonl`));
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureName}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureName}`);
+  }
   return loadDiffSession(ref);
 }
 
 async function loadDiffFixtureCodex(fixtureId: string): Promise<Session> {
   const refs = await discoverCodexSessions([CODEX_FIXTURES_ROOT]);
   const ref = refs.find((r) => r.id === fixtureId);
-  if (!ref) throw new Error(`fixture ref not found: ${fixtureId}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${fixtureId}`);
+  }
   return loadDiffSession(ref);
 }
 
@@ -295,8 +307,8 @@ describe("renderDiffHtml", () => {
     const b = await loadDiffFixtureClaude("compaction");
     const report = buildDiffReport(diffSessions(a, b));
     const html = renderDiffHtml(report, {
-      peekVersion: "0.1.0",
       generatedAtISO: "2026-08-08T00:00:00.000Z",
+      peekVersion: "0.1.0",
     });
 
     assertWellFormed(html);
@@ -351,7 +363,7 @@ describe("renderReportHtml — --json-embed script-breakout escaping", () => {
     const data = buildReportData(
       { ...session, cwd: payload },
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data, { jsonEmbed: true });
 
@@ -367,9 +379,7 @@ describe("renderReportHtml — --json-embed script-breakout escaping", () => {
 
     // The parsed-back JSON still round-trips the original value exactly —
     // the escape is reversible, not lossy.
-    const match = html.match(
-      /<script type="application\/json" id="peek-report-data">([\s\S]*?)<\/script>/,
-    );
+    const match = html.match(TEST_PATTERN_1);
     expect(match).not.toBeNull();
     const embedded = JSON.parse(match?.[1] ?? "");
     expect(embedded.cwd).toBe(payload);
@@ -388,7 +398,7 @@ describe("renderReportHtml — Working directory row is shortened", () => {
     const data = buildReportData(
       { ...session, cwd },
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data);
 
@@ -403,7 +413,7 @@ describe("renderReportHtml — Working directory row is shortened", () => {
     const data = buildReportData(
       { ...session, cwd },
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderReportHtml(data);
 

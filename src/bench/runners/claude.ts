@@ -21,7 +21,7 @@ function slugifyCwd(cwd: string): string {
 /** Exported for tests only (slug regression coverage). */
 export function transcriptPathForTest(
   workspaceDir: string,
-  sessionId: string,
+  sessionId: string
 ): string {
   return transcriptPath(workspaceDir, sessionId);
 }
@@ -32,7 +32,7 @@ function transcriptPath(workspaceDir: string, sessionId: string): string {
     ".claude",
     "projects",
     slugifyCwd(workspaceDir),
-    `${sessionId}.jsonl`,
+    `${sessionId}.jsonl`
   );
 }
 
@@ -90,9 +90,9 @@ export const claudeRunner: BenchRunner = {
       exitCode: proc.exitCode,
       timedOut: proc.timedOut,
       wallMs,
-      ...(sessionPath !== undefined ? { sessionPath } : {}),
-      stderrTail: proc.stderrTail,
+      ...(sessionPath === undefined ? {} : { sessionPath }),
       raw,
+      stderrTail: proc.stderrTail,
     };
   },
 };

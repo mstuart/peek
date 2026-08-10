@@ -18,11 +18,11 @@ import type {
 import { serializeJSON } from "../render/json.js";
 import { formatNumber, renderTable } from "../render/table.js";
 import {
-  type ResolveOptions,
   formatCost,
   formatTimestamp,
   loadSession,
   parseHarnessOption,
+  type ResolveOptions,
 } from "./shared.js";
 
 // ---------------------------------------------------------------------------
@@ -30,21 +30,21 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface CompactionRow {
+  afterLabel: string;
+  beforeLabel: string; // exact, or "unknown" when the anchor search found nothing
+  costLabel: string; // "—" when the adapter attached no cost, or attached one that's unpriced
+  discardedLabel: string; // "~"-prefixed estimate (labeled per PLAN), or "unknown"
+  shrinkLabel: string; // exact (before - after) — the headline number per PLAN
+  summarySizeLabel: string; // "~"-prefixed estimate, always known (adapters always set summaryTokensEst)
   turnNumber: number; // event.turnIndex + 1 — 1-indexed, matches commands/context.ts's convention
   whenLabel: string;
-  beforeLabel: string; // exact, or "unknown" when the anchor search found nothing
-  afterLabel: string;
-  shrinkLabel: string; // exact (before - after) — the headline number per PLAN
-  discardedLabel: string; // "~"-prefixed estimate (labeled per PLAN), or "unknown"
-  summarySizeLabel: string; // "~"-prefixed estimate, always known (adapters always set summaryTokensEst)
-  costLabel: string; // "—" when the adapter attached no cost, or attached one that's unpriced
 }
 
 export interface CompactionsReport {
-  harness: HarnessId;
-  sessionId: string;
   cwd: string;
+  harness: HarnessId;
   rows: CompactionRow[];
+  sessionId: string;
 }
 
 function isCompactionEvent(event: SessionEvent): event is CompactionEvent {
@@ -61,14 +61,14 @@ function estOrUnknown(value: number | null): string {
 
 function buildCompactionRow(event: CompactionEvent): CompactionRow {
   return {
+    afterLabel: exactOrUnknown(event.tokensAfterExact),
+    beforeLabel: exactOrUnknown(event.tokensBeforeExact),
+    costLabel: event.cost?.priced ? formatCost(event.cost.total) : "—",
+    discardedLabel: estOrUnknown(event.discardedEst),
+    shrinkLabel: exactOrUnknown(event.shrinkExact),
+    summarySizeLabel: `~${formatNumber(event.summaryTokensEst)}`,
     turnNumber: event.turnIndex + 1,
     whenLabel: formatTimestamp(event.at),
-    beforeLabel: exactOrUnknown(event.tokensBeforeExact),
-    afterLabel: exactOrUnknown(event.tokensAfterExact),
-    shrinkLabel: exactOrUnknown(event.shrinkExact),
-    discardedLabel: estOrUnknown(event.discardedEst),
-    summarySizeLabel: `~${formatNumber(event.summaryTokensEst)}`,
-    costLabel: event.cost?.priced ? formatCost(event.cost.total) : "—",
   };
 }
 
@@ -83,10 +83,10 @@ export function buildCompactionsReport(session: Session): CompactionsReport {
     .sort((a, b) => a.turnNumber - b.turnNumber);
 
   return {
-    harness: session.harness,
-    sessionId: session.id,
     cwd: session.cwd,
+    harness: session.harness,
     rows,
+    sessionId: session.id,
   };
 }
 
@@ -97,7 +97,7 @@ export function buildCompactionsReport(session: Session): CompactionsReport {
 /** parse -> dedupSession -> finalizeCompactions for `peek compactions <sess>`. */
 export async function loadFinalizedSession(
   idOrPath: string | undefined,
-  opts: ResolveOptions = {},
+  opts: ResolveOptions = {}
 ): Promise<Session> {
   const { session } = await loadSession(idOrPath, opts);
   return finalizeCompactions(session);
@@ -105,7 +105,7 @@ export async function loadFinalizedSession(
 
 function printCompactionsReport(report: CompactionsReport): void {
   process.stdout.write(
-    `peek compactions — ${report.harness} · ${report.sessionId} · ${report.cwd}\n\n`,
+    `peek compactions — ${report.harness} · ${report.sessionId} · ${report.cwd}\n\n`
   );
 
   if (report.rows.length === 0) {
@@ -125,33 +125,37 @@ function printCompactionsReport(report: CompactionsReport): void {
   ]);
   const table = renderTable(
     [
-      { header: "turn", align: "right" },
+      { align: "right", header: "turn" },
       { header: "when" },
-      { header: "before", align: "right" },
-      { header: "after", align: "right" },
-      { header: "shrink", align: "right" },
-      { header: "~discarded", align: "right" },
-      { header: "~summary", align: "right" },
-      { header: "cost", align: "right" },
+      { align: "right", header: "before" },
+      { align: "right", header: "after" },
+      { align: "right", header: "shrink" },
+      { align: "right", header: "~discarded" },
+      { align: "right", header: "~summary" },
+      { align: "right", header: "cost" },
     ],
-    rows,
+    rows
   );
   process.stdout.write(`${table}\n`);
 }
 
 export interface CompactionsCommandOptions {
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
   json?: boolean;
 }
 
 export async function runCompactionsCommand(
   sessionArg: string | undefined,
-  options: CompactionsCommandOptions,
+  options: CompactionsCommandOptions
 ): Promise<void> {
   const resolveOpts: ResolveOptions = {};
-  if (options.harness !== undefined) resolveOpts.harness = options.harness;
-  if (options.cwd !== undefined) resolveOpts.cwd = options.cwd;
+  if (options.harness !== undefined) {
+    resolveOpts.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    resolveOpts.cwd = options.cwd;
+  }
   const session = await loadFinalizedSession(sessionArg, resolveOpts);
   const report = buildCompactionsReport(session);
   if (options.json) {
@@ -170,36 +174,40 @@ export function registerCompactionsCommand(program: Command): void {
     .command("compactions [sessionIdOrPath]")
     .description(
       "Compaction timeline: exact shrink (before - after), labeled discardedEst, per-compaction cost. " +
-        "With no argument, resolves to the most recently modified session.",
+        "With no argument, resolves to the most recently modified session."
     )
     .option(
       "--harness <harness>",
       "restrict to one harness: claude-code | codex | pi",
-      parseHarnessOption,
+      parseHarnessOption
     )
     .option(
       "--cwd <path>",
-      "restrict to sessions discovered from this working directory",
+      "restrict to sessions discovered from this working directory"
     )
     .option("--json", "emit the full computed structure as JSON")
     .action(
       async (
         sessionIdOrPath: string | undefined,
-        opts: { harness?: HarnessId; cwd?: string; json?: boolean },
+        opts: { harness?: HarnessId; cwd?: string; json?: boolean }
       ) => {
         try {
           const commandOpts: CompactionsCommandOptions = {
             json: Boolean(opts.json),
           };
-          if (opts.harness !== undefined) commandOpts.harness = opts.harness;
-          if (opts.cwd !== undefined) commandOpts.cwd = opts.cwd;
+          if (opts.harness !== undefined) {
+            commandOpts.harness = opts.harness;
+          }
+          if (opts.cwd !== undefined) {
+            commandOpts.cwd = opts.cwd;
+          }
           await runCompactionsCommand(sessionIdOrPath, commandOpts);
         } catch (err) {
           process.stderr.write(
-            `${err instanceof Error ? err.message : String(err)}\n`,
+            `${err instanceof Error ? err.message : String(err)}\n`
           );
           process.exitCode = 1;
         }
-      },
+      }
     );
 }

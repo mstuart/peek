@@ -36,28 +36,28 @@ const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
 
 function makeCacheRow(overrides: Partial<TotalsCacheRow> = {}): TotalsCacheRow {
   return {
-    path: "/fake/session.jsonl",
-    mtimeMs: 1000,
-    size: 500,
+    compactions: 0,
+    cwd: "/fake/project-a",
+    endedAt: "2026-08-01T00:05:00.000Z",
     harness: "claude-code",
+    model: "claude-fake",
+    mtimeMs: 1000,
+    path: "/fake/session.jsonl",
+    size: 500,
+    startedAt: "2026-08-01T00:00:00.000Z",
     totals: {
-      tokens: {
-        inputUncached: 100,
-        cacheRead: 200,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
-        output: 50,
-        contextTotal: 350,
-      },
       cost: 1.5,
       priced: true,
+      tokens: {
+        cacheRead: 200,
+        cacheWrite1h: 0,
+        cacheWrite5m: 0,
+        contextTotal: 350,
+        inputUncached: 100,
+        output: 50,
+      },
     },
     turns: 4,
-    compactions: 0,
-    startedAt: "2026-08-01T00:00:00.000Z",
-    endedAt: "2026-08-01T00:05:00.000Z",
-    cwd: "/fake/project-a",
-    model: "claude-fake",
     ...overrides,
   };
 }
@@ -66,12 +66,12 @@ function makeEntry(row: TotalsCacheRow, id = "fake"): CachedListEntry {
   const ref: SessionRef = {
     harness: row.harness,
     id,
+    kind: "main",
+    mtime: new Date(row.mtimeMs),
     path: row.path,
     sizeBytes: row.size,
-    mtime: new Date(row.mtimeMs),
-    kind: "main",
   };
-  return { ref, cached: row };
+  return { cached: row, ref };
 }
 
 describe("buildDashboardData", () => {
@@ -79,18 +79,18 @@ describe("buildDashboardData", () => {
     const entries: ListReportEntry[] = [
       makeEntry(
         makeCacheRow({ path: "/a", startedAt: "2026-08-01T23:59:00.000Z" }),
-        "a",
+        "a"
       ),
       makeEntry(
         makeCacheRow({ path: "/b", startedAt: "2026-08-02T00:01:00.000Z" }),
-        "b",
+        "b"
       ),
     ];
     const data = buildDashboardData(
       entries,
       {},
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     expect(data.days).toEqual(["2026-08-01", "2026-08-02"]);
     expect(data.headline.activeDays).toBe(2);
@@ -101,24 +101,24 @@ describe("buildDashboardData", () => {
     const entries: ListReportEntry[] = models.map((m, i) =>
       makeEntry(
         makeCacheRow({
-          path: `/session-${i}`,
           model: m,
+          path: `/session-${i}`,
           startedAt: "2026-08-01T00:00:00.000Z",
           totals: {
-            tokens: {
-              inputUncached: 10,
-              cacheRead: 0,
-              cacheWrite5m: 0,
-              cacheWrite1h: 0,
-              output: 10,
-              contextTotal: 20,
-            },
             cost: 10 - i, // descending: m1=10 ... m7=4, so top-5 = m1..m5
             priced: true,
+            tokens: {
+              cacheRead: 0,
+              cacheWrite1h: 0,
+              cacheWrite5m: 0,
+              contextTotal: 20,
+              inputUncached: 10,
+              output: 10,
+            },
           },
         }),
-        `s${i}`,
-      ),
+        `s${i}`
+      )
     );
     const data = buildDashboardData(entries, {}, new Date(), "0.1.0");
     const modelNames = data.dailyCost.map((s) => s.model);
@@ -134,7 +134,7 @@ describe("buildDashboardData", () => {
 
   it("does not add an 'other' bucket when 5 or fewer models are present", () => {
     const entries: ListReportEntry[] = ["m1", "m2"].map((m, i) =>
-      makeEntry(makeCacheRow({ path: `/s${i}`, model: m }), `s${i}`),
+      makeEntry(makeCacheRow({ model: m, path: `/s${i}` }), `s${i}`)
     );
     const data = buildDashboardData(entries, {}, new Date(), "0.1.0");
     expect(data.dailyCost.map((s) => s.model)).toEqual(["m1", "m2"]);
@@ -146,37 +146,37 @@ describe("buildDashboardData", () => {
         makeCacheRow({
           path: "/priced",
           totals: {
-            tokens: {
-              inputUncached: 10,
-              cacheRead: 0,
-              cacheWrite5m: 0,
-              cacheWrite1h: 0,
-              output: 0,
-              contextTotal: 10,
-            },
             cost: 5,
             priced: true,
+            tokens: {
+              cacheRead: 0,
+              cacheWrite1h: 0,
+              cacheWrite5m: 0,
+              contextTotal: 10,
+              inputUncached: 10,
+              output: 0,
+            },
           },
         }),
-        "p",
+        "p"
       ),
       makeEntry(
         makeCacheRow({
           path: "/unpriced",
           totals: {
-            tokens: {
-              inputUncached: 10,
-              cacheRead: 0,
-              cacheWrite5m: 0,
-              cacheWrite1h: 0,
-              output: 0,
-              contextTotal: 10,
-            },
             cost: 0,
             priced: false,
+            tokens: {
+              cacheRead: 0,
+              cacheWrite1h: 0,
+              cacheWrite5m: 0,
+              contextTotal: 10,
+              inputUncached: 10,
+              output: 0,
+            },
           },
         }),
-        "u",
+        "u"
       ),
     ];
     const data = buildDashboardData(entries, {}, new Date(), "0.1.0");
@@ -190,7 +190,7 @@ describe("buildDashboardData", () => {
       const d = new Date(Date.UTC(2026, 0, 1 + i));
       return makeEntry(
         makeCacheRow({ path: `/d${i}`, startedAt: d.toISOString() }),
-        `d${i}`,
+        `d${i}`
       );
     });
 
@@ -204,17 +204,17 @@ describe("buildDashboardData", () => {
       entries,
       { since: new Date(Date.UTC(2026, 0, 1)) },
       new Date(),
-      "0.1.0",
+      "0.1.0"
     );
     expect(widened.days.length).toBe(35);
   });
 
   it("per-harness rollup includes both harnesses when both are present", () => {
     const entries: ListReportEntry[] = [
-      makeEntry(makeCacheRow({ path: "/c", harness: "claude-code" }), "c"),
+      makeEntry(makeCacheRow({ harness: "claude-code", path: "/c" }), "c"),
       makeEntry(
-        makeCacheRow({ path: "/x", harness: "codex", model: "gpt-x" }),
-        "x",
+        makeCacheRow({ harness: "codex", model: "gpt-x", path: "/x" }),
+        "x"
       ),
     ];
     const data = buildDashboardData(entries, {}, new Date(), "0.1.0");
@@ -227,23 +227,23 @@ describe("buildDashboardData", () => {
     const entries: ListReportEntry[] = Array.from({ length: 20 }, (_, i) =>
       makeEntry(
         makeCacheRow({
-          path: `/proj${i}`,
           cwd: `/fake/project-${i}`,
+          path: `/proj${i}`,
           totals: {
-            tokens: {
-              inputUncached: 1,
-              cacheRead: 0,
-              cacheWrite5m: 0,
-              cacheWrite1h: 0,
-              output: 0,
-              contextTotal: 1,
-            },
             cost: i, // ascending — top 15 by cost excludes the 5 cheapest
             priced: true,
+            tokens: {
+              cacheRead: 0,
+              cacheWrite1h: 0,
+              cacheWrite5m: 0,
+              contextTotal: 1,
+              inputUncached: 1,
+              output: 0,
+            },
           },
         }),
-        `p${i}`,
-      ),
+        `p${i}`
+      )
     );
     const data = buildDashboardData(entries, {}, new Date(), "0.1.0");
     expect(data.perProject.length).toBe(15);
@@ -256,15 +256,15 @@ describe("renderDashboardHtml", () => {
     const entries: ListReportEntry[] = [
       makeEntry(makeCacheRow({ path: "/a" }), "a"),
       makeEntry(
-        makeCacheRow({ path: "/b", harness: "codex", model: "gpt-x" }),
-        "b",
+        makeCacheRow({ harness: "codex", model: "gpt-x", path: "/b" }),
+        "b"
       ),
     ];
     const data = buildDashboardData(
       entries,
       {},
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderDashboardHtml(data);
 
@@ -281,7 +281,7 @@ describe("renderDashboardHtml", () => {
       [],
       {},
       new Date("2026-08-08T00:00:00.000Z"),
-      "0.1.0",
+      "0.1.0"
     );
     const html = renderDashboardHtml(data);
     expect(html.startsWith("<!doctype html>")).toBe(true);
@@ -313,7 +313,7 @@ describe("runReportAllCommand", () => {
     } else {
       process.env.XDG_CACHE_HOME = prevXdgCacheHome;
     }
-    await rm(outDir, { recursive: true, force: true });
+    await rm(outDir, { force: true, recursive: true });
   });
 
   it("writes a dashboard HTML file covering claude-code and codex fixtures", async () => {
@@ -337,8 +337,8 @@ describe("runReportAllCommand", () => {
   it("--harness filters the dashboard to a single harness", async () => {
     const outputPath = join(outDir, "dashboard-claude-only.html");
     await runReportAllCommand({
-      output: outputPath,
       harness: "claude-code",
+      output: outputPath,
       roots: {
         "claude-code": [CLAUDE_FIXTURES_ROOT],
         codex: [CODEX_FIXTURES_ROOT],

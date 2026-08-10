@@ -67,26 +67,26 @@ function loadSnapshot(): RawLiteLLMSnapshot {
  * snapshot. Fields are only present when the source record carried the corresponding
  * "*_above_200k_tokens" key. */
 export interface TieredModelPrice {
-  thresholdTokens: 200_000;
+  cacheCreation1h?: number;
+  cacheCreation5m?: number;
+  cacheRead?: number;
   input?: number;
   output?: number;
-  cacheRead?: number;
-  cacheCreation5m?: number;
-  cacheCreation1h?: number;
+  thresholdTokens: 200_000;
 }
 
 export interface ModelPrice {
+  /** USD per cache-write token at the 1-hour TTL, or null when absent (engine hardcodes 2x
+   * input in that case per DESIGN.md accounting rule 4 — not applied here). */
+  cacheCreation1h: number | null;
+  /** USD per cache-write token at the default (5-minute) TTL, or null when absent. */
+  cacheCreation5m: number | null;
+  /** USD per cache-read token, or null when the snapshot doesn't price it. */
+  cacheRead: number | null;
   /** USD per input token. */
   input: number;
   /** USD per output token. */
   output: number;
-  /** USD per cache-read token, or null when the snapshot doesn't price it. */
-  cacheRead: number | null;
-  /** USD per cache-write token at the default (5-minute) TTL, or null when absent. */
-  cacheCreation5m: number | null;
-  /** USD per cache-write token at the 1-hour TTL, or null when absent (engine hardcodes 2x
-   * input in that case per DESIGN.md accounting rule 4 — not applied here). */
-  cacheCreation1h: number | null;
   /** Long-context tier pricing, or null when the model has none in the snapshot. */
   tiering: TieredModelPrice | null;
 }
@@ -105,16 +105,16 @@ function toModelPrice(record: RawLiteLLMRecord): ModelPrice | null {
 
   const tieredInput = numOrNull(record.input_cost_per_token_above_200k_tokens);
   const tieredOutput = numOrNull(
-    record.output_cost_per_token_above_200k_tokens,
+    record.output_cost_per_token_above_200k_tokens
   );
   const tieredCacheRead = numOrNull(
-    record.cache_read_input_token_cost_above_200k_tokens,
+    record.cache_read_input_token_cost_above_200k_tokens
   );
   const tieredCacheCreation5m = numOrNull(
-    record.cache_creation_input_token_cost_above_200k_tokens,
+    record.cache_creation_input_token_cost_above_200k_tokens
   );
   const tieredCacheCreation1h = numOrNull(
-    record.cache_creation_input_token_cost_above_1hr_above_200k_tokens,
+    record.cache_creation_input_token_cost_above_1hr_above_200k_tokens
   );
   const hasTiering =
     tieredInput !== null ||
@@ -126,26 +126,26 @@ function toModelPrice(record: RawLiteLLMRecord): ModelPrice | null {
   const tiering: TieredModelPrice | null = hasTiering
     ? {
         thresholdTokens: 200_000,
-        ...(tieredInput !== null ? { input: tieredInput } : {}),
-        ...(tieredOutput !== null ? { output: tieredOutput } : {}),
-        ...(tieredCacheRead !== null ? { cacheRead: tieredCacheRead } : {}),
-        ...(tieredCacheCreation5m !== null
-          ? { cacheCreation5m: tieredCacheCreation5m }
-          : {}),
-        ...(tieredCacheCreation1h !== null
-          ? { cacheCreation1h: tieredCacheCreation1h }
-          : {}),
+        ...(tieredInput === null ? {} : { input: tieredInput }),
+        ...(tieredOutput === null ? {} : { output: tieredOutput }),
+        ...(tieredCacheRead === null ? {} : { cacheRead: tieredCacheRead }),
+        ...(tieredCacheCreation5m === null
+          ? {}
+          : { cacheCreation5m: tieredCacheCreation5m }),
+        ...(tieredCacheCreation1h === null
+          ? {}
+          : { cacheCreation1h: tieredCacheCreation1h }),
       }
     : null;
 
   return {
+    cacheCreation1h: numOrNull(
+      record.cache_creation_input_token_cost_above_1hr
+    ),
+    cacheCreation5m: numOrNull(record.cache_creation_input_token_cost),
+    cacheRead: numOrNull(record.cache_read_input_token_cost),
     input,
     output,
-    cacheRead: numOrNull(record.cache_read_input_token_cost),
-    cacheCreation5m: numOrNull(record.cache_creation_input_token_cost),
-    cacheCreation1h: numOrNull(
-      record.cache_creation_input_token_cost_above_1hr,
-    ),
     tiering,
   };
 }

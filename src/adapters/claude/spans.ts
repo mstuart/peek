@@ -22,7 +22,9 @@ const SPAN_TEXT_CAP = 2000;
 const COORDINATION_PREFIXES = ["<teammate-message", "<task-notification"];
 
 function getProp(obj: unknown, key: string): unknown {
-  if (typeof obj !== "object" || obj === null) return undefined;
+  if (typeof obj !== "object" || obj === null) {
+    return;
+  }
   return (obj as Record<string, unknown>)[key];
 }
 
@@ -31,7 +33,7 @@ function makeSpan(
   text: string,
   turnRole: TurnRole,
   truncated: boolean,
-  extra?: { toolName?: string; mcpServer?: string },
+  extra?: { toolName?: string; mcpServer?: string }
 ): Span {
   const charCount = text.length;
   return {
@@ -40,8 +42,8 @@ function makeSpan(
     ...(charCount <= SPAN_TEXT_CAP ? { text } : {}),
     truncated,
     turnRole,
-    ...(extra?.toolName !== undefined ? { toolName: extra.toolName } : {}),
-    ...(extra?.mcpServer !== undefined ? { mcpServer: extra.mcpServer } : {}),
+    ...(extra?.toolName === undefined ? {} : { toolName: extra.toolName }),
+    ...(extra?.mcpServer === undefined ? {} : { mcpServer: extra.mcpServer }),
   };
 }
 
@@ -64,17 +66,24 @@ export function parseMcpToolName(name: string): {
   toolName: string;
   mcpServer?: string;
 } {
-  if (!name.startsWith("mcp__")) return { toolName: name };
+  if (!name.startsWith("mcp__")) {
+    return { toolName: name };
+  }
   const parts = name.split("__");
-  if (parts.length < 3) return { toolName: name };
+  if (parts.length < 3) {
+    return { toolName: name };
+  }
   const mcpServer = parts[1] as string;
   const toolName = parts.slice(2).join("__");
-  return { toolName, mcpServer };
+  return { mcpServer, toolName };
 }
 
 /** assistant record content blocks → text/thinking/tool_use spans. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Wire-format block dispatch is intentionally explicit and tolerant.
 export function extractAssistantContentSpans(content: unknown): Span[] {
-  if (!Array.isArray(content)) return [];
+  if (!Array.isArray(content)) {
+    return [];
+  }
   const spans: Span[] = [];
 
   for (const block of content) {
@@ -107,8 +116,8 @@ export function extractAssistantContentSpans(content: unknown): Span[] {
       spans.push(
         makeSpan("toolCallArgs", text, "assistant", false, {
           toolName,
-          ...(mcpServer !== undefined ? { mcpServer } : {}),
-        }),
+          ...(mcpServer === undefined ? {} : { mcpServer }),
+        })
       );
     }
     // Other block types (redacted_thinking, server_tool_use, image, ...) are
@@ -143,14 +152,22 @@ export type ToolUseIndex = ReadonlyMap<
 export function buildToolUseIndex(records: RawClaudeRecord[]): ToolUseIndex {
   const index = new Map<string, { toolName: string; mcpServer?: string }>();
   for (const record of records) {
-    if (record.type !== "assistant") continue;
+    if (record.type !== "assistant") {
+      continue;
+    }
     const content = getProp(record.raw.message, "content");
-    if (!Array.isArray(content)) continue;
+    if (!Array.isArray(content)) {
+      continue;
+    }
     for (const block of content) {
-      if (getProp(block, "type") !== "tool_use") continue;
+      if (getProp(block, "type") !== "tool_use") {
+        continue;
+      }
       const id = getProp(block, "id");
       const name = getProp(block, "name");
-      if (typeof id !== "string" || typeof name !== "string") continue;
+      if (typeof id !== "string" || typeof name !== "string") {
+        continue;
+      }
       index.set(id, parseMcpToolName(name));
     }
   }
@@ -186,9 +203,11 @@ function serializeToolUseResult(toolUseResult: unknown): string {
  * span) rather than guessing. */
 function lookupToolUse(
   toolUseIndex: ToolUseIndex,
-  toolUseId: unknown,
+  toolUseId: unknown
 ): { toolName?: string; mcpServer?: string } {
-  if (typeof toolUseId !== "string") return {};
+  if (typeof toolUseId !== "string") {
+    return {};
+  }
   return toolUseIndex.get(toolUseId) ?? {};
 }
 
@@ -203,21 +222,25 @@ function lookupToolUse(
 function extractToolResultSpans(
   record: RawClaudeRecord,
   offloadedToolIds: ReadonlySet<string>,
-  toolUseIndex: ToolUseIndex,
+  toolUseIndex: ToolUseIndex
 ): Span[] {
-  const message = record.raw.message;
+  const { message } = record.raw;
   const content = getProp(message, "content");
-  if (!Array.isArray(content)) return [];
+  if (!Array.isArray(content)) {
+    return [];
+  }
 
   const inlineBlocks = content.filter(
-    (block) => getProp(block, "type") === "tool_result",
+    (block) => getProp(block, "type") === "tool_result"
   );
-  if (inlineBlocks.length === 0) return [];
+  if (inlineBlocks.length === 0) {
+    return [];
+  }
 
   const isOffloaded = (toolUseId: unknown): boolean =>
     typeof toolUseId === "string" && offloadedToolIds.has(toolUseId);
 
-  const toolUseResult = record.raw.toolUseResult;
+  const { toolUseResult } = record.raw;
   if (toolUseResult !== undefined) {
     // One canonical source per record: toolUseResult covers whichever
     // tool_result block(s) triggered it. Truncation/linking is keyed off the
@@ -230,7 +253,7 @@ function extractToolResultSpans(
         text,
         "user",
         isOffloaded(toolUseId),
-        lookupToolUse(toolUseIndex, toolUseId),
+        lookupToolUse(toolUseIndex, toolUseId)
       ),
     ];
   }
@@ -248,7 +271,7 @@ function extractToolResultSpans(
       text,
       "user",
       isOffloaded(toolUseId),
-      lookupToolUse(toolUseIndex, toolUseId),
+      lookupToolUse(toolUseIndex, toolUseId)
     );
   });
 }
@@ -263,9 +286,9 @@ function extractToolResultSpans(
 export function extractUserContentSpans(
   record: RawClaudeRecord,
   offloadedToolIds: ReadonlySet<string>,
-  toolUseIndex: ToolUseIndex,
+  toolUseIndex: ToolUseIndex
 ): Span[] {
-  const message = record.raw.message;
+  const { message } = record.raw;
   const content = getProp(message, "content");
 
   if (record.raw.isCompactSummary === true) {
@@ -280,7 +303,9 @@ export function extractUserContentSpans(
     spans.push(makeSpan(classifyUserText(content), content, "user", false));
   } else if (Array.isArray(content)) {
     for (const block of content) {
-      if (getProp(block, "type") !== "text") continue;
+      if (getProp(block, "type") !== "text") {
+        continue;
+      }
       const text = getProp(block, "text");
       if (typeof text === "string") {
         spans.push(makeSpan(classifyUserText(text), text, "user", false));

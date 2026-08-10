@@ -73,9 +73,9 @@ const KNOWN_RECORD_TYPES: ReadonlySet<string> = new Set<ClaudeRecordType>([
  * (e.g. compaction anchoring).
  */
 export interface RawClaudeRecord {
-  type: string;
-  raw: Record<string, unknown>;
   line: number;
+  raw: Record<string, unknown>;
+  type: string;
 }
 
 export interface ReadRecordsResult {
@@ -95,21 +95,23 @@ export interface ReadRecordsResult {
  * rejects; malformed content never does.
  */
 export async function readClaudeRecords(
-  filePath: string,
+  filePath: string
 ): Promise<ReadRecordsResult> {
   const warnings: ParseWarning[] = [];
   const records: RawClaudeRecord[] = [];
 
   const rl = createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
     crlfDelay: Number.POSITIVE_INFINITY,
+    input: createReadStream(filePath, { encoding: "utf8" }),
   });
 
   let lineNo = 0;
   for await (const line of rl) {
-    lineNo++;
+    lineNo += 1;
     const trimmed = line.trim();
-    if (trimmed === "") continue;
+    if (trimmed === "") {
+      continue;
+    }
 
     let parsed: unknown;
     try {
@@ -117,8 +119,8 @@ export async function readClaudeRecords(
     } catch {
       warnings.push({
         code: "malformed-line",
-        message: `line ${lineNo}: invalid JSON`,
         line: lineNo,
+        message: `line ${lineNo}: invalid JSON`,
       });
       continue;
     }
@@ -130,8 +132,8 @@ export async function readClaudeRecords(
     ) {
       warnings.push({
         code: "malformed-line",
-        message: `line ${lineNo}: not a JSON object`,
         line: lineNo,
+        message: `line ${lineNo}: not a JSON object`,
       });
       continue;
     }
@@ -142,15 +144,15 @@ export async function readClaudeRecords(
     if (!KNOWN_RECORD_TYPES.has(type)) {
       warnings.push({
         code: "unknown-record-type",
+        line: lineNo,
         message: `line ${lineNo}: unrecognized record type ${
           type ? `"${type}"` : "(missing)"
         }`,
-        line: lineNo,
         ...(type ? { recordType: type } : {}),
       });
     }
 
-    records.push({ type, raw: record, line: lineNo });
+    records.push({ line: lineNo, raw: record, type });
   }
 
   return { records, warnings };

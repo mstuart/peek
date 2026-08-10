@@ -52,11 +52,15 @@ const RAW_SAFE_KEYS = new Set([
  * trimmed rather than simply absent (e.g. a runner that never populated
  * `raw`, or a crash before the result JSON was parsed). */
 function redactRaw(raw: unknown): unknown {
-  if (raw === undefined) return undefined;
+  if (raw === undefined) {
+    return;
+  }
   const safe: Record<string, unknown> = { rawRedacted: true };
   if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-      if (RAW_SAFE_KEYS.has(key)) safe[key] = value;
+      if (RAW_SAFE_KEYS.has(key)) {
+        safe[key] = value;
+      }
     }
   }
   return safe;
@@ -75,9 +79,9 @@ export function resultsDirForRun(baseDir: string, timestamp: Date): string {
 }
 
 export interface ResultsWriter {
+  append: (result: TrialResult) => Promise<void>;
   readonly dir: string;
   readonly path: string;
-  append(result: TrialResult): Promise<void>;
 }
 
 export interface CreateResultsWriterOptions {
@@ -89,21 +93,21 @@ export interface CreateResultsWriterOptions {
  * append() appends one JSON line per TrialResult to `results.jsonl` inside
  * it. */
 export async function createResultsWriter(
-  opts: CreateResultsWriterOptions = {},
+  opts: CreateResultsWriterOptions = {}
 ): Promise<ResultsWriter> {
   const baseDir = opts.baseDir ?? DEFAULT_RESULTS_BASE_DIR;
   const dir = resultsDirForRun(baseDir, opts.timestamp ?? new Date());
   await mkdir(dir, { recursive: true });
   const filePath = path.join(dir, RESULTS_FILE_NAME);
   return {
-    dir,
-    path: filePath,
     async append(result: TrialResult): Promise<void> {
       // Redact TrialResult.raw at the disk-write chokepoint (never in the
       // in-memory TrialResult returned to callers) — see redactRaw above.
       const persisted: TrialResult = { ...result, raw: redactRaw(result.raw) };
       await appendFile(filePath, `${JSON.stringify(persisted)}\n`, "utf8");
     },
+    dir,
+    path: filePath,
   };
 }
 
@@ -123,7 +127,7 @@ export interface ReadResultsOutcome {
  * any other unparseable line) from a crashed run — that line is reported as
  * a warning and skipped; every other line's TrialResult is still returned. */
 export async function readResults(
-  filePath: string,
+  filePath: string
 ): Promise<ReadResultsOutcome> {
   let raw: string;
   try {
@@ -131,6 +135,7 @@ export async function readResults(
   } catch (err) {
     throw new Error(
       `could not read results file ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
   return parseResultsJsonl(raw);
@@ -145,7 +150,9 @@ export function parseResultsJsonl(raw: string): ReadResultsOutcome {
   const warnings: ReadResultsWarning[] = [];
   lines.forEach((line, i) => {
     const trimmed = line.trim();
-    if (trimmed.length === 0) return; // blank line (trailing newline, etc.) — not a warning
+    if (trimmed.length === 0) {
+      return; // blank line (trailing newline, etc.) — not a warning
+    }
     try {
       results.push(JSON.parse(trimmed) as TrialResult);
     } catch (err) {

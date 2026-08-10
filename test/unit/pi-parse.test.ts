@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { parsePiSession } from "../../src/adapters/pi/parse.js";
 import {
   extractBashExecutionMessageSpans,
@@ -22,42 +22,42 @@ function ref(dir: string, filename: string, id: string): SessionRef {
   return {
     harness: "pi",
     id,
+    kind: "main",
+    mtime: new Date(0),
     path: join(dir, filename),
     sizeBytes: 0,
-    mtime: new Date(0),
-    kind: "main",
   };
 }
 
 const CASE1_MAIN = ref(
   SYSTEM_A_DIR,
   "2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
-  "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+  "cb5b132f-2542-40b3-a7c9-49ffc431e30b"
 );
 const CASE2_BRANCHED = ref(
   SYSTEM_A_DIR,
   "2026-08-01T11-30-00-000Z_18351767-372f-4f0b-8053-b625fc378e36.jsonl",
-  "18351767-372f-4f0b-8053-b625fc378e36",
+  "18351767-372f-4f0b-8053-b625fc378e36"
 );
 const CASE3_COMPACTION = ref(
   SYSTEM_A_DIR,
   "2026-08-01T12-45-00-000Z_6d816cb4-9915-4741-9571-a436e36f68c5.jsonl",
-  "6d816cb4-9915-4741-9571-a436e36f68c5",
+  "6d816cb4-9915-4741-9571-a436e36f68c5"
 );
 const CASE4_MISC = ref(
   SYSTEM_A_DIR,
   "2026-08-01T13-15-00-000Z_26ec89e6-9ad9-4563-bbce-47c243e72c96.jsonl",
-  "26ec89e6-9ad9-4563-bbce-47c243e72c96",
+  "26ec89e6-9ad9-4563-bbce-47c243e72c96"
 );
 const CASE5_FORKED = ref(
   SYSTEM_A_DIR,
   "2026-08-01T14-00-00-000Z_700d9363-cf7c-40ee-8bb0-833bc99c6a6a.jsonl",
-  "700d9363-cf7c-40ee-8bb0-833bc99c6a6a",
+  "700d9363-cf7c-40ee-8bb0-833bc99c6a6a"
 );
 const CASE6_SYSTEM_B = ref(
   SYSTEM_B_DIR,
   "2026-08-01T16-00-00-000Z_b9f0fc61-c03e-49c7-a148-e1e7c660822c.jsonl",
-  "b9f0fc61-c03e-49c7-a148-e1e7c660822c",
+  "b9f0fc61-c03e-49c7-a148-e1e7c660822c"
 );
 
 function isModeChange(e: { kind: string }): e is ModeChange {
@@ -87,7 +87,7 @@ describe("parsePiSession — case 1: main session", () => {
 
   it("attaches the preceding user record's span to the assistant turn, alongside its own assistantText/toolCallArgs spans", async () => {
     const { session } = await parsePiSession(CASE1_MAIN);
-    const assistantTurn = session.turns[1];
+    const assistantTurn = session.turns.at(1);
     expect(assistantTurn?.contentSpans).toEqual([
       {
         category: "userText",
@@ -107,9 +107,9 @@ describe("parsePiSession — case 1: main session", () => {
         category: "toolCallArgs",
         charCount: JSON.stringify({ command: "ls -la" }).length,
         text: JSON.stringify({ command: "ls -la" }),
+        toolName: "bash",
         truncated: false,
         turnRole: "assistant",
-        toolName: "bash",
       },
     ]);
   });
@@ -132,35 +132,36 @@ describe("parsePiSession — case 1: main session", () => {
 
   it("maps the assistant turn's usage and display-mode cost exactly", async () => {
     const { session } = await parsePiSession(CASE1_MAIN);
-    const assistantTurn = session.turns[1];
+    const assistantTurn = session.turns.at(1);
     expect(assistantTurn).toBeDefined();
     expect(assistantTurn?.model).toBe("claude-sonnet-5");
     expect(assistantTurn?.usage).toMatchObject({
-      inputUncached: 1000,
       cacheRead: 500,
-      cacheWrite5m: 100,
       cacheWrite1h: 0,
+      cacheWrite5m: 100,
+      inputUncached: 1000,
       output: 200,
     });
     expect(assistantTurn?.contextTotal).toBe(1600);
     expect(assistantTurn?.cost).toMatchObject({
-      input: 0.003,
-      output: 0.003,
-      cacheRead: 0.00015,
-      cacheWrite5m: 0.000375,
+      cacheRead: 0.000_15,
       cacheWrite1h: 0,
-      total: 0.006525,
+      cacheWrite5m: 0.000_375,
+      input: 0.003,
       mode: "display",
+      output: 0.003,
       priced: true,
+      total: 0.006_525,
     });
   });
 
   it("notes bashExecution's excludeFromContext flag in the turn's usage.raw", async () => {
     const { session } = await parsePiSession(CASE1_MAIN);
-    const bashTurn = session.turns[3];
-    expect(bashTurn?.usage.raw).toMatchObject({
-      role: "bashExecution",
+    const bashTurn = session.turns.at(3);
+    assert(bashTurn);
+    expect(bashTurn.usage.raw).toMatchObject({
       excludeFromContext: true,
+      role: "bashExecution",
     });
     // composition zeroing for excluded turns is the engine's job, not the parser's
     expect(bashTurn?.contextTotal).toBe(0);
@@ -197,17 +198,19 @@ describe("parsePiSession — case 2: branched session", () => {
 
     // b1000004's cost (0.00498), not b1000003's (0.00483), confirms which
     // branch was walked.
-    expect(session.turns[2]?.cost.total).toBe(0.00498);
+    const activeBranchTurn = session.turns.at(2);
+    assert(activeBranchTurn);
+    expect(activeBranchTurn.cost.total).toBe(0.004_98);
 
     const branchWarning = warnings.find(
-      (w) => w.code === "pi-off-path-branches",
+      (w) => w.code === "pi-off-path-branches"
     );
     expect(branchWarning?.message).toBe("1 entries on unvisited branches");
   });
 
   it("only the active-path user span (b1000001) reaches the first assistant turn — the off-path b1000003 branch contributes nothing", async () => {
     const { session } = await parsePiSession(CASE2_BRANCHED);
-    const firstAssistantTurn = session.turns[1];
+    const firstAssistantTurn = session.turns.at(1);
     expect(firstAssistantTurn?.contentSpans).toEqual([
       {
         category: "userText",
@@ -241,7 +244,7 @@ describe("parsePiSession — case 3: compaction", () => {
 
     const compactions = session.events.filter(isCompaction);
     expect(compactions).toHaveLength(1);
-    const compaction = compactions[0];
+    const compaction = compactions.at(0);
 
     expect(compaction?.turnIndex).toBe(4);
     expect(compaction?.tokensBeforeExact).toBe(8500);
@@ -249,7 +252,7 @@ describe("parsePiSession — case 3: compaction", () => {
     expect(compaction?.shrinkExact).toBeNull();
     expect(compaction?.discardedEst).toBeNull();
     expect(compaction?.summaryTokensEst).toBe(35); // ceil(139 chars / 4)
-    expect(compaction?.cost?.total).toBe(0.02025);
+    expect(compaction?.cost?.total).toBe(0.020_25);
     expect(compaction?.cost?.mode).toBe("display");
     expect(compaction?.cost?.priced).toBe(true);
   });
@@ -258,7 +261,7 @@ describe("parsePiSession — case 3: compaction", () => {
     const { session } = await parsePiSession(CASE3_COMPACTION);
     const summary =
       "User asked to run the full test suite and check integration tests. Result: integration tests pass; 3 unit tests fail in the billing module.";
-    const landingTurn = session.turns[5];
+    const landingTurn = session.turns.at(5);
     expect(landingTurn?.role).toBe("assistant");
     expect(landingTurn?.contentSpans).toContainEqual({
       category: "compactionSummaries",
@@ -273,13 +276,13 @@ describe("parsePiSession — case 3: compaction", () => {
       expect.objectContaining({
         category: "userText",
         text: "Fix the billing module failures.",
-      }),
+      })
     );
     // No warning: the path ends on an assistant turn, so nothing is left
     // pending.
     const { warnings } = await parsePiSession(CASE3_COMPACTION);
     expect(
-      warnings.find((w) => w.code === "pi-trailing-content-unattached"),
+      warnings.find((w) => w.code === "pi-trailing-content-unattached")
     ).toBeUndefined();
   });
 });
@@ -297,17 +300,17 @@ describe("parsePiSession — case 4: misc entry types + unknown entry", () => {
     const unknown = warnings.find((w) => w.code === "pi-unknown-entry-type");
     expect(unknown?.recordType).toBe("future_entry");
     expect(
-      warnings.find((w) => w.code === "pi-off-path-branches"),
+      warnings.find((w) => w.code === "pi-off-path-branches")
     ).toBeUndefined();
   });
 
   it("holds the custom_message's coordination span pending (no Turn of its own, and no assistant turn follows it — surfaced as trailing-unattached)", async () => {
     const { warnings } = await parsePiSession(CASE4_MISC);
     const trailing = warnings.find(
-      (w) => w.code === "pi-trailing-content-unattached",
+      (w) => w.code === "pi-trailing-content-unattached"
     );
     expect(trailing?.message).toBe(
-      "1 span(s) from trailing pi entries after the last assistant turn are not attached to any Turn",
+      "1 span(s) from trailing pi entries after the last assistant turn are not attached to any Turn"
     );
   });
 });
@@ -319,7 +322,7 @@ describe("parsePiSession — case 5: forked session", () => {
 
     const forkWarning = warnings.find((w) => w.code === "pi-forked-session");
     expect(forkWarning?.message).toContain(
-      "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+      "cb5b132f-2542-40b3-a7c9-49ffc431e30b"
     );
   });
 });
@@ -338,7 +341,7 @@ describe("parsePiSession — case 6: System B (harness v4)", () => {
     expect(session.harnessVersion).toBe("4");
     expect(session.id).toBe("b9f0fc61-c03e-49c7-a148-e1e7c660822c");
     expect(session.cwd).toBe("/Users/fake/project");
-    expect(session.startedAt).toEqual(new Date(1785600000000));
+    expect(session.startedAt).toEqual(new Date(1_785_600_000_000));
     expect(session.turns.length).toBeGreaterThan(0);
     expect(session.warnings).toEqual(warnings);
     expect(warnings.some((w) => w.code === "pi-system-b")).toBe(false);
@@ -382,51 +385,51 @@ describe("pi span extraction (T6.4) — direct extractor tests", () => {
     const content =
       "total 8\ndrwxr-xr-x  3 fake  staff   96 Aug  1 10:00 .\n-rw-r--r--  1 fake  staff  123 Aug  1 10:00 README.md";
     const spans = extractToolResultMessageSpans({
+      content,
+      isError: false,
       role: "toolResult",
       toolCallId: "tc_0001",
       toolName: "bash",
-      content,
-      isError: false,
     });
     // Self-diagnosing on recurrence: if this ever mismatches, the message
     // shows the actual vs. expected length and the text driving it, rather
     // than a bare number.
     expect(
       spans[0]?.charCount,
-      `expected charCount ${content.length} (source text length), got ${spans[0]?.charCount}; source text: ${JSON.stringify(content)}`,
+      `expected charCount ${content.length} (source text length), got ${spans[0]?.charCount}; source text: ${JSON.stringify(content)}`
     ).toBe(content.length);
     expect(spans).toEqual([
       {
         category: "toolResults",
         charCount: content.length,
         text: content,
+        toolName: "bash",
         truncated: false,
         turnRole: "user",
-        toolName: "bash",
       },
     ]);
   });
 
   it("extractBashExecutionMessageSpans skips excludeFromContext:true entirely (no zero-charCount span either)", () => {
     const spans = extractBashExecutionMessageSpans({
-      role: "bashExecution",
-      command: "rm -rf node_modules/.cache",
-      output: "",
-      exitCode: 0,
       cancelled: false,
-      truncated: false,
+      command: "rm -rf node_modules/.cache",
       excludeFromContext: true,
+      exitCode: 0,
+      output: "",
+      role: "bashExecution",
+      truncated: false,
     });
     expect(spans).toEqual([]);
   });
 
   it("extractBashExecutionMessageSpans concatenates command+output into a toolResults span, toolName 'bash', when not excluded", () => {
     const spans = extractBashExecutionMessageSpans({
-      role: "bashExecution",
-      command: "ls",
-      output: "README.md\n",
-      exitCode: 0,
       cancelled: false,
+      command: "ls",
+      exitCode: 0,
+      output: "README.md\n",
+      role: "bashExecution",
       truncated: false,
     });
     expect(spans).toEqual([
@@ -434,20 +437,20 @@ describe("pi span extraction (T6.4) — direct extractor tests", () => {
         category: "toolResults",
         charCount: "ls".length + "README.md\n".length,
         text: "lsREADME.md\n",
+        toolName: "bash",
         truncated: false,
         turnRole: "user",
-        toolName: "bash",
       },
     ]);
   });
 
   it("extractBashExecutionMessageSpans marks truncated:true when the message's own truncated flag is set", () => {
     const spans = extractBashExecutionMessageSpans({
-      role: "bashExecution",
-      command: "cat huge.log",
-      output: "...",
-      exitCode: 0,
       cancelled: false,
+      command: "cat huge.log",
+      exitCode: 0,
+      output: "...",
+      role: "bashExecution",
       truncated: true,
     });
     expect(spans[0]?.truncated).toBe(true);
@@ -456,7 +459,7 @@ describe("pi span extraction (T6.4) — direct extractor tests", () => {
   it("extractCustomContentSpans produces a coordination span only when display:true and content is present", () => {
     const shown = extractCustomContentSpans(
       "Deployment started for revision a1b2c3d.",
-      true,
+      true
     );
     expect(shown).toEqual([
       {
@@ -485,7 +488,7 @@ describe("parsePiSession — spans:false lite parse", () => {
     ]);
 
     expect(full.session.turns.some((t) => t.contentSpans.length > 0)).toBe(
-      true,
+      true
     );
     expect(lite.session.turns).toHaveLength(full.session.turns.length);
     for (const turn of lite.session.turns) {

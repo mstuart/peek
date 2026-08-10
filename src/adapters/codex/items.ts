@@ -50,7 +50,9 @@ const COMPOSITION_CATEGORIES: readonly CompositionCategory[] = [
 
 function zeroComposition(): Composition {
   const categories = {} as Record<CompositionCategory, number>;
-  for (const category of COMPOSITION_CATEGORIES) categories[category] = 0;
+  for (const category of COMPOSITION_CATEGORIES) {
+    categories[category] = 0;
+  }
   return { categories, residual: 0, residualShare: 0, truncated: false };
 }
 
@@ -58,30 +60,32 @@ function zeroComposition(): Composition {
 // marks these as not-yet-priced rather than "priced at zero".
 function zeroCost(): CostBreakdown {
   return {
-    input: 0,
-    output: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    total: 0,
+    cacheWrite5m: 0,
+    input: 0,
     mode: "auto",
+    output: 0,
     priced: false,
+    total: 0,
   };
 }
 
 function zeroUsage(raw: unknown): NormalizedUsage {
   return {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
     raw,
   };
 }
 
 function prop(raw: unknown, key: string): unknown {
-  if (typeof raw !== "object" || raw === null) return undefined;
+  if (typeof raw !== "object" || raw === null) {
+    return;
+  }
   return (raw as Record<string, unknown>)[key];
 }
 
@@ -94,7 +98,7 @@ function makeSpan(
   text: string,
   turnRole: TurnRole,
   truncated: boolean,
-  extra?: { toolName?: string; mcpServer?: string },
+  extra?: { toolName?: string; mcpServer?: string }
 ): Span {
   const charCount = text.length;
   return {
@@ -103,8 +107,8 @@ function makeSpan(
     ...(charCount <= SPAN_TEXT_CAP ? { text } : {}),
     truncated,
     turnRole,
-    ...(extra?.toolName !== undefined ? { toolName: extra.toolName } : {}),
-    ...(extra?.mcpServer !== undefined ? { mcpServer: extra.mcpServer } : {}),
+    ...(extra?.toolName === undefined ? {} : { toolName: extra.toolName }),
+    ...(extra?.mcpServer === undefined ? {} : { mcpServer: extra.mcpServer }),
   };
 }
 
@@ -113,18 +117,18 @@ function skeletonTurn(
   model: string,
   timestamp: Date,
   spans: Span[],
-  usageRaw: unknown,
+  usageRaw: unknown
 ): Turn {
   const usage = zeroUsage(usageRaw);
   return {
-    role,
-    model,
-    timestamp,
-    contentSpans: spans,
-    usage,
-    contextTotal: contextTotal(usage),
     composition: zeroComposition(),
+    contentSpans: spans,
+    contextTotal: contextTotal(usage),
     cost: zeroCost(),
+    model,
+    role,
+    timestamp,
+    usage,
   };
 }
 
@@ -154,7 +158,7 @@ const ENVIRONMENT_CONTEXT_PREFIX = "<environment_context>";
 
 function classifyUserMessageText(
   text: string,
-  turnContext: TurnContextInfo | undefined,
+  turnContext: TurnContextInfo | undefined
 ): Span {
   const trimmed = text.trimStart();
   if (AGENTS_INJECTION_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
@@ -178,12 +182,13 @@ function classifyUserMessageText(
  * text-representable and are skipped, mirroring claude/spans.ts's
  * block-type filtering.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Wire-format item dispatch is intentionally explicit and tolerant.
 function buildMessageTurn(
   payload: unknown,
   timestamp: Date,
   model: string,
   turnContext: TurnContextInfo | undefined,
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn {
   const role = str(prop(payload, "role"));
   const content = prop(payload, "content");
@@ -195,7 +200,9 @@ function buildMessageTurn(
     turnRole = "system";
     if (spansEnabled) {
       for (const item of items) {
-        if (prop(item, "type") !== "input_text") continue;
+        if (prop(item, "type") !== "input_text") {
+          continue;
+        }
         const text = textFromContentItem(item);
         if (text !== undefined) {
           spans.push(makeSpan("instructionInjection", text, "system", false));
@@ -206,7 +213,9 @@ function buildMessageTurn(
     turnRole = "assistant";
     if (spansEnabled) {
       for (const item of items) {
-        if (prop(item, "type") !== "output_text") continue;
+        if (prop(item, "type") !== "output_text") {
+          continue;
+        }
         const text = textFromContentItem(item);
         if (text !== undefined) {
           spans.push(makeSpan("assistantText", text, "assistant", false));
@@ -219,7 +228,9 @@ function buildMessageTurn(
     turnRole = "user";
     if (spansEnabled) {
       for (const item of items) {
-        if (prop(item, "type") !== "input_text") continue;
+        if (prop(item, "type") !== "input_text") {
+          continue;
+        }
         const text = textFromContentItem(item);
         if (text !== undefined) {
           spans.push(classifyUserMessageText(text, turnContext));
@@ -242,7 +253,7 @@ function buildReasoningTurn(
   payload: unknown,
   timestamp: Date,
   model: string,
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn {
   const summary = prop(payload, "summary");
   const spans: Span[] = [];
@@ -268,10 +279,16 @@ function buildReasoningTurn(
  */
 function extractArgsText(payload: unknown): string {
   const args = prop(payload, "arguments");
-  if (typeof args === "string") return args;
+  if (typeof args === "string") {
+    return args;
+  }
   const input = prop(payload, "input");
-  if (typeof input === "string") return input;
-  if (input !== undefined) return JSON.stringify(input);
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input !== undefined) {
+    return JSON.stringify(input);
+  }
   return JSON.stringify(payload ?? {});
 }
 
@@ -288,7 +305,7 @@ function buildToolCallTurn(
   timestamp: Date,
   model: string,
   state: CodexItemState,
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn {
   const toolName = str(prop(payload, "name")) ?? "unknown";
   const mcpServer = str(prop(payload, "namespace"));
@@ -296,7 +313,7 @@ function buildToolCallTurn(
   if (callId !== undefined) {
     state.callIndex.set(callId, {
       toolName,
-      ...(mcpServer !== undefined ? { mcpServer } : {}),
+      ...(mcpServer === undefined ? {} : { mcpServer }),
     });
   }
 
@@ -307,7 +324,7 @@ function buildToolCallTurn(
   const text = extractArgsText(payload);
   const span = makeSpan("toolCallArgs", text, "assistant", false, {
     toolName,
-    ...(mcpServer !== undefined ? { mcpServer } : {}),
+    ...(mcpServer === undefined ? {} : { mcpServer }),
   });
   return skeletonTurn("assistant", model, timestamp, [span], payload);
 }
@@ -319,7 +336,9 @@ function buildToolCallTurn(
  * JSON.stringify'd whole, same fallback spirit as extractArgsText.
  */
 function extractOutputText(output: unknown): string {
-  if (typeof output === "string") return output;
+  if (typeof output === "string") {
+    return output;
+  }
   const contentItems = prop(output, "content_items");
   if (Array.isArray(contentItems)) {
     return contentItems.map((item) => textFromContentItem(item) ?? "").join("");
@@ -341,19 +360,19 @@ function buildToolOutputTurn(
   timestamp: Date,
   model: string,
   state: CodexItemState,
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn {
   if (!spansEnabled) {
     return skeletonTurn("user", model, timestamp, [], payload);
   }
 
   const callId = str(prop(payload, "call_id"));
-  const linked = callId !== undefined ? state.callIndex.get(callId) : undefined;
+  const linked = callId === undefined ? undefined : state.callIndex.get(callId);
 
   const text = extractOutputText(prop(payload, "output"));
   const span = makeSpan("toolResults", text, "user", false, {
-    ...(linked?.toolName !== undefined ? { toolName: linked.toolName } : {}),
-    ...(linked?.mcpServer !== undefined ? { mcpServer: linked.mcpServer } : {}),
+    ...(linked?.toolName === undefined ? {} : { toolName: linked.toolName }),
+    ...(linked?.mcpServer === undefined ? {} : { mcpServer: linked.mcpServer }),
   });
   return skeletonTurn("user", model, timestamp, [span], payload);
 }
@@ -404,9 +423,9 @@ export function buildResponseItemTurn(
   currentModel: string,
   turnContext: TurnContextInfo | undefined,
   warnings: ParseWarning[],
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): Turn | undefined {
-  const payload = record.payload;
+  const { payload } = record;
   const type = str(prop(payload, "type"));
   const timestamp = record.timestamp ?? new Date(0);
 
@@ -416,7 +435,7 @@ export function buildResponseItemTurn(
       timestamp,
       currentModel,
       turnContext,
-      spansEnabled,
+      spansEnabled
     );
   }
   if (type === "reasoning") {
@@ -428,7 +447,7 @@ export function buildResponseItemTurn(
       timestamp,
       currentModel,
       state,
-      spansEnabled,
+      spansEnabled
     );
   }
   if (type !== undefined && TOOL_OUTPUT_TYPES.has(type)) {
@@ -437,17 +456,16 @@ export function buildResponseItemTurn(
       timestamp,
       currentModel,
       state,
-      spansEnabled,
+      spansEnabled
     );
   }
 
   warnings.push({
     code: "unknown-response-item",
+    line: record.line,
     message: `line ${record.line}: unrecognized response_item payload.type ${
       type ? `"${type}"` : "(missing)"
     }`,
-    line: record.line,
     recordType: "response_item",
   });
-  return undefined;
 }

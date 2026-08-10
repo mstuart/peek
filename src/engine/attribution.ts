@@ -48,31 +48,31 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 // ---------------------------------------------------------------------------
 
 export interface ModelTokens {
-  inputUncached: number;
   cacheRead: number;
-  cacheWrite5m: number;
   cacheWrite1h: number;
-  output: number;
+  cacheWrite5m: number;
   contextTotal: number;
+  inputUncached: number;
+  output: number;
 }
 
 export interface ModelAttribution {
-  model: string;
-  turnCount: number;
-  tokens: ModelTokens;
   cost: number;
+  model: string;
   /** false if any turn priced under this model was unpriced (CostBreakdown.priced === false) — see accounting.ts's SessionTotals.priced for the same all-or-nothing rationale. */
   priced: boolean;
+  tokens: ModelTokens;
+  turnCount: number;
 }
 
 function zeroModelTokens(): ModelTokens {
   return {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
-    output: 0,
+    cacheWrite5m: 0,
     contextTotal: 0,
+    inputUncached: 0,
+    output: 0,
   };
 }
 
@@ -89,11 +89,11 @@ function byModelFromTurns(turns: readonly Turn[]): ModelAttribution[] {
     let entry = byId.get(turn.model);
     if (!entry) {
       entry = {
-        model: turn.model,
-        turnCount: 0,
-        tokens: zeroModelTokens(),
         cost: 0,
+        model: turn.model,
         priced: true,
+        tokens: zeroModelTokens(),
+        turnCount: 0,
       };
       byId.set(turn.model, entry);
     }
@@ -105,7 +105,9 @@ function byModelFromTurns(turns: readonly Turn[]): ModelAttribution[] {
     entry.tokens.output += turn.usage.output;
     entry.tokens.contextTotal += turn.contextTotal;
     entry.cost += turn.cost.total;
-    if (!turn.cost.priced) entry.priced = false;
+    if (!turn.cost.priced) {
+      entry.priced = false;
+    }
   }
 
   return [...byId.values()].sort((a, b) => a.model.localeCompare(b.model));
@@ -123,21 +125,21 @@ export interface ToolSpanStats {
 }
 
 export interface ToolAttribution {
-  toolName: string;
   /** First mcpServer seen tagging this toolName; undefined for built-in (non-MCP) tools and for the UNATTRIBUTED_TOOL bucket. */
   mcpServer?: string;
+  /** ESTIMATE — ceil(totalChars / 4), the same char/4 basis composition.ts uses. Never a cost figure; see file header. */
+  tokenShareEst: number;
   toolCallArgs: ToolSpanStats;
+  toolName: string;
   toolResults: ToolSpanStats;
   totalChars: number;
   totalSpanCount: number;
-  /** ESTIMATE — ceil(totalChars / 4), the same char/4 basis composition.ts uses. Never a cost figure; see file header. */
-  tokenShareEst: number;
 }
 
 interface ToolBucket {
-  toolName: string;
   mcpServer?: string;
   toolCallArgs: ToolSpanStats;
+  toolName: string;
   toolResults: ToolSpanStats;
 }
 
@@ -167,13 +169,13 @@ function finalizeToolBucket(bucket: ToolBucket): ToolAttribution {
   const totalChars = bucket.toolCallArgs.chars + bucket.toolResults.chars;
   return {
     toolName: bucket.toolName,
-    ...(bucket.mcpServer !== undefined ? { mcpServer: bucket.mcpServer } : {}),
+    ...(bucket.mcpServer === undefined ? {} : { mcpServer: bucket.mcpServer }),
+    tokenShareEst: Math.ceil(totalChars / 4),
     toolCallArgs: bucket.toolCallArgs,
     toolResults: bucket.toolResults,
     totalChars,
     totalSpanCount:
       bucket.toolCallArgs.spanCount + bucket.toolResults.spanCount,
-    tokenShareEst: Math.ceil(totalChars / 4),
   };
 }
 
@@ -194,13 +196,15 @@ function byToolFromTurns(turns: readonly Turn[]): ToolAttribution[] {
 
   for (const turn of turns) {
     for (const span of turn.contentSpans) {
-      if (!isToolSpan(span)) continue;
+      if (!isToolSpan(span)) {
+        continue;
+      }
       const key = toolBucketKey(span);
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
-          toolName: key,
           toolCallArgs: zeroSpanStats(),
+          toolName: key,
           toolResults: zeroSpanStats(),
         };
         buckets.set(key, bucket);
@@ -213,20 +217,20 @@ function byToolFromTurns(turns: readonly Turn[]): ToolAttribution[] {
     .map(finalizeToolBucket)
     .sort(
       (a, b) =>
-        b.totalChars - a.totalChars || a.toolName.localeCompare(b.toolName),
+        b.totalChars - a.totalChars || a.toolName.localeCompare(b.toolName)
     );
 }
 
 export interface McpServerAttribution {
   mcpServer: string;
-  toolCallArgs: ToolSpanStats;
-  toolResults: ToolSpanStats;
-  totalChars: number;
-  totalSpanCount: number;
   /** ESTIMATE — see byTool's tokenShareEst / the file-header honesty note. */
   tokenShareEst: number;
+  toolCallArgs: ToolSpanStats;
+  toolResults: ToolSpanStats;
   /** Distinct tool names seen under this server. */
   tools: string[];
+  totalChars: number;
+  totalSpanCount: number;
 }
 
 /**
@@ -253,7 +257,9 @@ function byMcpServerFromTurns(turns: readonly Turn[]): McpServerAttribution[] {
 
   for (const turn of turns) {
     for (const span of turn.contentSpans) {
-      if (!isToolSpan(span) || span.mcpServer === undefined) continue;
+      if (!isToolSpan(span) || span.mcpServer === undefined) {
+        continue;
+      }
       let bucket = buckets.get(span.mcpServer);
       if (!bucket) {
         bucket = {
@@ -270,7 +276,9 @@ function byMcpServerFromTurns(turns: readonly Turn[]): McpServerAttribution[] {
           : bucket.toolResults;
       stats.chars += span.charCount;
       stats.spanCount += 1;
-      if (span.toolName !== undefined) bucket.tools.add(span.toolName);
+      if (span.toolName !== undefined) {
+        bucket.tools.add(span.toolName);
+      }
     }
   }
 
@@ -279,18 +287,18 @@ function byMcpServerFromTurns(turns: readonly Turn[]): McpServerAttribution[] {
       const totalChars = bucket.toolCallArgs.chars + bucket.toolResults.chars;
       return {
         mcpServer: bucket.mcpServer,
+        tokenShareEst: Math.ceil(totalChars / 4),
         toolCallArgs: bucket.toolCallArgs,
         toolResults: bucket.toolResults,
+        tools: [...bucket.tools].sort(),
         totalChars,
         totalSpanCount:
           bucket.toolCallArgs.spanCount + bucket.toolResults.spanCount,
-        tokenShareEst: Math.ceil(totalChars / 4),
-        tools: [...bucket.tools].sort(),
       };
     })
     .sort(
       (a, b) =>
-        b.totalChars - a.totalChars || a.mcpServer.localeCompare(b.mcpServer),
+        b.totalChars - a.totalChars || a.mcpServer.localeCompare(b.mcpServer)
     );
 }
 
@@ -313,9 +321,9 @@ function turnMessageId(turn: Turn): string | undefined {
 }
 
 export interface MergedAttribution {
+  byMcpServer: McpServerAttribution[];
   byModel: ModelAttribution[];
   byTool: ToolAttribution[];
-  byMcpServer: McpServerAttribution[];
 }
 
 /**
@@ -354,8 +362,9 @@ export interface MergedAttribution {
  * PRECONDITION: same as every function in this file — each session must
  * already be per-file deduped (dedup.ts's dedupSession) and priced.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Attribution merges preserve explicit handling for every optional dimension.
 export function mergeAttribution(
-  families: readonly (readonly Session[])[],
+  families: readonly (readonly Session[])[]
 ): MergedAttribution {
   const canonicalTurns: Turn[] = [];
 
@@ -366,7 +375,9 @@ export function mergeAttribution(
         if (turn.role === "assistant") {
           const messageId = turnMessageId(turn);
           if (messageId !== undefined) {
-            if (seenMessageId.has(messageId)) continue;
+            if (seenMessageId.has(messageId)) {
+              continue;
+            }
             seenMessageId.add(messageId);
           }
         }
@@ -376,9 +387,9 @@ export function mergeAttribution(
   }
 
   return {
+    byMcpServer: byMcpServerFromTurns(canonicalTurns),
     byModel: byModelFromTurns(canonicalTurns),
     byTool: byToolFromTurns(canonicalTurns),
-    byMcpServer: byMcpServerFromTurns(canonicalTurns),
   };
 }
 
@@ -387,49 +398,49 @@ export function mergeAttribution(
 // ---------------------------------------------------------------------------
 
 export interface SubagentAttribution {
-  id: string;
   harness: HarnessId;
+  id: string;
   totals: SessionTotals;
 }
 
 export interface SubagentRollup {
-  parent: SessionTotals;
+  /** childrenCombined.cost / combined.cost; 0 when combined.cost is 0 (avoids NaN, not a claim of zero subagent spend). */
+  childCostShare: number;
   children: SubagentAttribution[];
   /** Sum of every child's totals (tokens + cost). */
   childrenCombined: SessionTotals;
   /** parent + childrenCombined. */
   combined: SessionTotals;
-  /** childrenCombined.cost / combined.cost; 0 when combined.cost is 0 (avoids NaN, not a claim of zero subagent spend). */
-  childCostShare: number;
+  parent: SessionTotals;
 }
 
 function zeroSessionTotals(): SessionTotals {
   return {
-    tokens: {
-      inputUncached: 0,
-      cacheRead: 0,
-      cacheWrite5m: 0,
-      cacheWrite1h: 0,
-      output: 0,
-      contextTotal: 0,
-    },
     cost: 0,
     priced: true,
+    tokens: {
+      cacheRead: 0,
+      cacheWrite1h: 0,
+      cacheWrite5m: 0,
+      contextTotal: 0,
+      inputUncached: 0,
+      output: 0,
+    },
   };
 }
 
 function mergeSessionTotals(a: SessionTotals, b: SessionTotals): SessionTotals {
   return {
-    tokens: {
-      inputUncached: a.tokens.inputUncached + b.tokens.inputUncached,
-      cacheRead: a.tokens.cacheRead + b.tokens.cacheRead,
-      cacheWrite5m: a.tokens.cacheWrite5m + b.tokens.cacheWrite5m,
-      cacheWrite1h: a.tokens.cacheWrite1h + b.tokens.cacheWrite1h,
-      output: a.tokens.output + b.tokens.output,
-      contextTotal: a.tokens.contextTotal + b.tokens.contextTotal,
-    },
     cost: a.cost + b.cost,
     priced: a.priced && b.priced,
+    tokens: {
+      cacheRead: a.tokens.cacheRead + b.tokens.cacheRead,
+      cacheWrite1h: a.tokens.cacheWrite1h + b.tokens.cacheWrite1h,
+      cacheWrite5m: a.tokens.cacheWrite5m + b.tokens.cacheWrite5m,
+      contextTotal: a.tokens.contextTotal + b.tokens.contextTotal,
+      inputUncached: a.tokens.inputUncached + b.tokens.inputUncached,
+      output: a.tokens.output + b.tokens.output,
+    },
   };
 }
 
@@ -454,25 +465,25 @@ export function bySubagent(sessions: readonly Session[]): SubagentRollup {
   const [parentSession, ...childSessions] = dedupFamily(sessions);
   if (!parentSession) {
     throw new Error(
-      "bySubagent: sessions must be non-empty (sessions[0] is the parent)",
+      "bySubagent: sessions must be non-empty (sessions[0] is the parent)"
     );
   }
 
   const parent = sessionTotals(parentSession);
   const children: SubagentAttribution[] = childSessions.map((child) => ({
-    id: child.id,
     harness: child.harness,
+    id: child.id,
     totals: sessionTotals(child),
   }));
   const childrenCombined = children.reduce(
     (acc, child) => mergeSessionTotals(acc, child.totals),
-    zeroSessionTotals(),
+    zeroSessionTotals()
   );
   const combined = mergeSessionTotals(parent, childrenCombined);
   const childCostShare =
     combined.cost > 0 ? childrenCombined.cost / combined.cost : 0;
 
-  return { parent, children, childrenCombined, combined, childCostShare };
+  return { childCostShare, children, childrenCombined, combined, parent };
 }
 
 // ---------------------------------------------------------------------------
@@ -481,27 +492,27 @@ export function bySubagent(sessions: readonly Session[]): SubagentRollup {
 
 export interface CacheTotals {
   cacheRead: number;
-  cacheWrite5m: number;
   cacheWrite1h: number;
+  cacheWrite5m: number;
   inputUncached: number;
 }
 
 export interface CacheMissEntry {
-  turnIndex: number;
-  timestamp: Date;
-  /** `diagnostics.cache_miss_reason.type` when present and a string (e.g. "system_changed"). */
-  type?: string;
   /** `diagnostics.cache_miss_reason.cache_missed_input_tokens` when present and a number. */
   cacheMissedInputTokens?: number;
   raw: unknown;
+  timestamp: Date;
+  turnIndex: number;
+  /** `diagnostics.cache_miss_reason.type` when present and a string (e.g. "system_changed"). */
+  type?: string;
 }
 
 export interface CacheAnalysis {
-  totals: CacheTotals;
   /** cacheRead / (cacheRead + inputUncached + cacheWrite5m + cacheWrite1h); 0 when that denominator is 0. */
   hitRate: number;
   /** Turns carrying a Turn.cacheMissReason, in turn order — the "miss-reason spikes" data for `peek cost`. */
   missReasons: CacheMissEntry[];
+  totals: CacheTotals;
 }
 
 /**
@@ -513,8 +524,8 @@ export interface CacheAnalysis {
 export function cacheAnalysis(session: Session): CacheAnalysis {
   const totals: CacheTotals = {
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
     inputUncached: 0,
   };
   const missReasons: CacheMissEntry[] = [];
@@ -525,7 +536,9 @@ export function cacheAnalysis(session: Session): CacheAnalysis {
     totals.cacheWrite1h += turn.usage.cacheWrite1h;
     totals.inputUncached += turn.usage.inputUncached;
 
-    if (turn.cacheMissReason === undefined) return;
+    if (turn.cacheMissReason === undefined) {
+      return;
+    }
     const rec = asRecord(turn.cacheMissReason);
     const type = typeof rec?.type === "string" ? rec.type : undefined;
     const cacheMissedInputTokens =
@@ -533,12 +546,12 @@ export function cacheAnalysis(session: Session): CacheAnalysis {
         ? rec.cache_missed_input_tokens
         : undefined;
     missReasons.push({
-      turnIndex,
       timestamp: turn.timestamp,
-      ...(type !== undefined ? { type } : {}),
-      ...(cacheMissedInputTokens !== undefined
-        ? { cacheMissedInputTokens }
-        : {}),
+      turnIndex,
+      ...(type === undefined ? {} : { type }),
+      ...(cacheMissedInputTokens === undefined
+        ? {}
+        : { cacheMissedInputTokens }),
       raw: turn.cacheMissReason,
     });
   });
@@ -550,5 +563,5 @@ export function cacheAnalysis(session: Session): CacheAnalysis {
     totals.cacheWrite1h;
   const hitRate = denominator > 0 ? totals.cacheRead / denominator : 0;
 
-  return { totals, hitRate, missReasons };
+  return { hitRate, missReasons, totals };
 }

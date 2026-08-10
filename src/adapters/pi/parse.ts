@@ -69,21 +69,27 @@ function isModeChange(event: SessionEvent): event is ModeChange {
 function emptySessionFromHeaderLine(
   ref: SessionRef,
   headerLine: string | undefined,
-  harnessVersion: string,
+  harnessVersion: string
 ): Session {
-  let id = ref.id;
-  let cwd = ref.cwd ?? "";
-  let startedAt = ref.mtime;
+  const { cwd: refCwd, id: refId, mtime: refMtime } = ref;
+  let id = refId;
+  let cwd = refCwd ?? "";
+  let startedAt = refMtime;
 
   if (headerLine !== undefined) {
     try {
       const parsed: unknown = JSON.parse(headerLine);
       if (isRecord(parsed)) {
-        if (typeof parsed.id === "string") id = parsed.id;
-        if (typeof parsed.cwd === "string") cwd = parsed.cwd;
-        const ts = parsed.timestamp;
-        if (typeof ts === "number" || typeof ts === "string")
-          startedAt = new Date(ts);
+        const { cwd: parsedCwd, id: parsedId, timestamp } = parsed;
+        if (typeof parsedId === "string") {
+          id = parsedId;
+        }
+        if (typeof parsedCwd === "string") {
+          cwd = parsedCwd;
+        }
+        if (typeof timestamp === "number" || typeof timestamp === "string") {
+          startedAt = new Date(timestamp);
+        }
       }
     } catch {
       // ignore — fall back to SessionRef-derived defaults below
@@ -91,16 +97,16 @@ function emptySessionFromHeaderLine(
   }
 
   return {
+    children: [],
+    configSnapshot: { model: "", modelChanges: [] },
+    cwd,
+    endedAt: startedAt,
+    events: [],
     harness: "pi",
     harnessVersion,
     id,
-    cwd,
     startedAt,
-    endedAt: startedAt,
-    configSnapshot: { model: "", modelChanges: [] },
     turns: [],
-    events: [],
-    children: [],
     warnings: [],
   };
 }
@@ -112,9 +118,10 @@ export interface ParsePiSessionOptions {
   spans?: boolean;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Harness-version dispatch intentionally preserves tolerant parsing in one pass.
 export async function parsePiSession(
   ref: SessionRef,
-  opts: ParsePiSessionOptions = {},
+  opts: ParsePiSessionOptions = {}
 ): Promise<ParseResult> {
   const spansEnabled = opts.spans ?? true;
   const raw = await readFile(ref.path, "utf8");
@@ -136,7 +143,7 @@ export async function parsePiSession(
   const warnings: ParseWarning[] = [...result.warnings];
 
   const leafId = activeLeaf(entries);
-  const path = leafId !== undefined ? pathToRoot(entries, leafId) : [];
+  const path = leafId === undefined ? [] : pathToRoot(entries, leafId);
   const offPathCount = entries.size - path.length;
   if (offPathCount > 0) {
     warnings.push({
@@ -163,7 +170,9 @@ export async function parsePiSession(
 
   for (const id of path) {
     const entry = entries.get(id);
-    if (!entry) continue;
+    if (!entry) {
+      continue;
+    }
 
     switch (entry.type) {
       case "message": {
@@ -171,7 +180,7 @@ export async function parsePiSession(
           entry,
           lastKnownModel,
           pendingSpans,
-          spansEnabled,
+          spansEnabled
         );
         if (!built) {
           warnings.push({
@@ -182,7 +191,9 @@ export async function parsePiSession(
           break;
         }
         turns.push(built.turn);
-        if (built.newModel !== undefined) lastKnownModel = built.newModel;
+        if (built.newModel !== undefined) {
+          lastKnownModel = built.newModel;
+        }
         if (built.turn.role === "assistant") {
           pendingSpans = [];
         } else if (spansEnabled) {
@@ -194,28 +205,30 @@ export async function parsePiSession(
         break;
       }
       case "thinking_level_change": {
-        const raw = prop(entry.data, "thinkingLevel");
-        const to = typeof raw === "string" ? raw : String(raw ?? "");
+        const rawValue = prop(entry.data, "thinkingLevel");
+        const to =
+          typeof rawValue === "string" ? rawValue : String(rawValue ?? "");
         events.push({
-          kind: "modeChange",
           at: new Date(entry.timestamp),
           field: "thinkingLevel",
-          ...(lastThinkingLevel !== undefined
-            ? { from: lastThinkingLevel }
-            : {}),
+          kind: "modeChange",
+          ...(lastThinkingLevel === undefined
+            ? {}
+            : { from: lastThinkingLevel }),
           to,
         });
         lastThinkingLevel = to;
         break;
       }
       case "model_change": {
-        const raw = prop(entry.data, "modelId");
-        const to = typeof raw === "string" ? raw : String(raw ?? "");
+        const rawValue = prop(entry.data, "modelId");
+        const to =
+          typeof rawValue === "string" ? rawValue : String(rawValue ?? "");
         events.push({
-          kind: "modeChange",
           at: new Date(entry.timestamp),
           field: "model",
-          ...(lastKnownModel !== "" ? { from: lastKnownModel } : {}),
+          kind: "modeChange",
+          ...(lastKnownModel === "" ? {} : { from: lastKnownModel }),
           to,
         });
         lastKnownModel = to;
@@ -230,7 +243,7 @@ export async function parsePiSession(
         // resets to at this same turnIndex.
         if (spansEnabled) {
           pendingSpans.push(
-            ...extractCompactionSummarySpans(prop(entry.data, "summary")),
+            ...extractCompactionSummarySpans(prop(entry.data, "summary"))
           );
         }
         break;
@@ -245,8 +258,8 @@ export async function parsePiSession(
           pendingSpans.push(
             ...extractCustomContentSpans(
               prop(entry.data, "content"),
-              prop(entry.data, "display"),
-            ),
+              prop(entry.data, "display")
+            )
           );
         }
         break;
@@ -279,30 +292,30 @@ export async function parsePiSession(
     });
   }
 
-  const lastPathId = path[path.length - 1];
+  const lastPathId = path.at(-1);
   const lastEntry =
-    lastPathId !== undefined ? entries.get(lastPathId) : undefined;
+    lastPathId === undefined ? undefined : entries.get(lastPathId);
   const endedAt = lastEntry
     ? new Date(lastEntry.timestamp)
     : new Date(header.timestamp);
 
   const session: Session = {
-    harness: "pi",
-    harnessVersion:
-      header.version !== undefined ? String(header.version) : "unknown",
-    id: header.id,
-    cwd: header.cwd,
-    startedAt: new Date(header.timestamp),
-    endedAt,
+    children: [],
     configSnapshot: {
       model: lastKnownModel,
       modelChanges: events
         .filter(isModeChange)
         .filter((event) => event.field === "model"),
     },
-    turns,
+    cwd: header.cwd,
+    endedAt,
     events,
-    children: [],
+    harness: "pi",
+    harnessVersion:
+      header.version === undefined ? "unknown" : String(header.version),
+    id: header.id,
+    startedAt: new Date(header.timestamp),
+    turns,
     warnings,
   };
 

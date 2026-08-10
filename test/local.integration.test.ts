@@ -5,6 +5,8 @@ import { discoverCodexSessions } from "../src/adapters/codex/discover.js";
 import { parseCodexSession } from "../src/adapters/codex/parse.js";
 import type { SessionRef } from "../src/model/types.js";
 
+const TEST_PATTERN_1 = /\s+at \//;
+
 // Guards on real local ~/.claude and ~/.codex data — only runs when
 // PEEK_LOCAL=1 is set (Fable's [fable]-gated runs). Plain `vitest`
 // skips this block everywhere else, including CI.
@@ -22,30 +24,30 @@ const PROGRESS_EVERY = 200;
  * never raw content. */
 function sanitizeError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  const stackCut = raw.split(/\s+at \//)[0] ?? raw;
+  const stackCut = raw.split(TEST_PATTERN_1)[0] ?? raw;
   return stackCut.length > 120 ? `${stackCut.slice(0, 120)}…` : stackCut;
 }
 
 function topN(
   counts: Map<string, number>,
-  n: number,
+  n: number
 ): { message: string; count: number }[] {
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, n)
-    .map(([message, count]) => ({ message, count }));
+    .map(([message, count]) => ({ count, message }));
 }
 
 interface CorpusResult {
-  totalRefs: number;
   attempted: number;
-  ok: number;
   failed: number;
   failureMessageCounts: Map<string, number>;
-  warningCounts: Map<string, number>;
-  totalWarnings: number;
-  totalTurns: number;
+  ok: number;
   sessionsWithCompaction: number;
+  totalRefs: number;
+  totalTurns: number;
+  totalWarnings: number;
+  warningCounts: Map<string, number>;
 }
 
 async function runCorpus(
@@ -54,48 +56,49 @@ async function runCorpus(
     session: { turns: unknown[]; events: { kind: string }[] };
     warnings: { code: string }[];
   }>,
-  label: string,
+  label: string
 ): Promise<CorpusResult> {
   const result: CorpusResult = {
-    totalRefs: refs.length,
     attempted: refs.length,
-    ok: 0,
     failed: 0,
     failureMessageCounts: new Map(),
-    warningCounts: new Map(),
-    totalWarnings: 0,
-    totalTurns: 0,
+    ok: 0,
     sessionsWithCompaction: 0,
+    totalRefs: refs.length,
+    totalTurns: 0,
+    totalWarnings: 0,
+    warningCounts: new Map(),
   };
 
-  for (let i = 0; i < refs.length; i++) {
+  for (let i = 0; i < refs.length; i += 1) {
     const ref = refs[i] as SessionRef;
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: Local session parsing is intentionally serialized to bound I/O.
       const { session, warnings } = await parseFn(ref);
-      result.ok++;
+      result.ok += 1;
       result.totalTurns += session.turns.length;
       if (session.events.some((e) => e.kind === "compaction")) {
-        result.sessionsWithCompaction++;
+        result.sessionsWithCompaction += 1;
       }
       for (const w of warnings) {
-        result.totalWarnings++;
+        result.totalWarnings += 1;
         result.warningCounts.set(
           w.code,
-          (result.warningCounts.get(w.code) ?? 0) + 1,
+          (result.warningCounts.get(w.code) ?? 0) + 1
         );
       }
     } catch (err) {
-      result.failed++;
+      result.failed += 1;
       const msg = sanitizeError(err);
       result.failureMessageCounts.set(
         msg,
-        (result.failureMessageCounts.get(msg) ?? 0) + 1,
+        (result.failureMessageCounts.get(msg) ?? 0) + 1
       );
     }
 
     if ((i + 1) % PROGRESS_EVERY === 0) {
       console.info(
-        `[local-integration:${label}] progress: ${i + 1}/${refs.length} (ok=${result.ok} failed=${result.failed})`,
+        `[local-integration:${label}] progress: ${i + 1}/${refs.length} (ok=${result.ok} failed=${result.failed})`
       );
     }
   }
@@ -106,9 +109,11 @@ async function runCorpus(
 function printSummary(label: string, r: CorpusResult, capNote?: string) {
   const rate = r.attempted === 0 ? 1 : r.ok / r.attempted;
   console.info(`\n=== local-integration summary: ${label} ===`);
-  if (capNote) console.info(capNote);
+  if (capNote) {
+    console.info(capNote);
+  }
   console.info(
-    `parsed: ${r.ok}/${r.attempted} ok, ${r.failed} failed — rate=${(rate * 100).toFixed(2)}%`,
+    `parsed: ${r.ok}/${r.attempted} ok, ${r.failed} failed — rate=${(rate * 100).toFixed(2)}%`
   );
   console.info(`total turns: ${r.totalTurns}`);
   console.info(`sessions with compaction events: ${r.sessionsWithCompaction}`);
@@ -146,7 +151,7 @@ describe.skipIf(!process.env.PEEK_LOCAL)("local integration", () => {
       const mainCount = refs.filter((r) => r.kind === "main").length;
       const subagentCount = refs.length - mainCount;
       console.info(
-        `[local-integration:claude] selected ${refs.length} refs (${mainCount} main, ${subagentCount} subagent) of ${allRefs.length} discovered`,
+        `[local-integration:claude] selected ${refs.length} refs (${mainCount} main, ${subagentCount} subagent) of ${allRefs.length} discovered`
       );
 
       const result = await runCorpus(refs, parseClaudeSession, "claude");
@@ -155,7 +160,7 @@ describe.skipIf(!process.env.PEEK_LOCAL)("local integration", () => {
       const rate = result.ok / result.attempted;
       expect(rate).toBeGreaterThanOrEqual(0.95);
     },
-    10 * 60 * 1000,
+    10 * 60 * 1000
   );
 
   it(
@@ -171,6 +176,6 @@ describe.skipIf(!process.env.PEEK_LOCAL)("local integration", () => {
       expect(result.failed).toBe(0);
       expect(result.ok).toBe(result.attempted);
     },
-    5 * 60 * 1000,
+    5 * 60 * 1000
   );
 });
