@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: Preserve the existing public module path.
 // pi System B (harness v4) mutation-log parsing (Lane D, docs/DESIGN.md § Other v2 subsystems).
 // See docs/recon/pi.md § "System B" — this is the harness-SDK (`AgentHarness`)
 // persistence format, a different lineage from the pi CLI's System A
@@ -67,19 +68,19 @@ import {
   extractCompactionSummarySpans,
   extractPendingMessageSpans,
 } from "./spans.js";
-import { pathToRoot } from "./tree.js";
 import type { PiEntry } from "./tree.js";
+import { pathToRoot } from "./tree.js";
 
 interface SystemBHeader {
-  version: number | undefined;
-  id: string;
   cwd: string;
+  id: string;
   timestampMs: number;
+  version: number | undefined;
 }
 
 interface LaneMove {
-  laneId: string;
   entryId: string;
+  laneId: string;
   seq: number;
 }
 
@@ -98,29 +99,43 @@ const CROSS_CHECK_TOLERANCE = 0.01; // 1% — mirrors codex/usage.ts
  */
 function parseSystemBHeader(
   ref: SessionRef,
-  headerLine: string | undefined,
+  headerLine: string | undefined
 ): SystemBHeader {
-  let id = ref.id;
-  let cwd = ref.cwd ?? "";
-  let timestampMs = ref.mtime.getTime();
+  const { cwd: refCwd, id: refId, mtime: refMtime } = ref;
+  let id = refId;
+  let cwd = refCwd ?? "";
+  let timestampMs = refMtime.getTime();
   let version: number | undefined;
 
   if (headerLine !== undefined) {
     try {
       const parsed: unknown = JSON.parse(headerLine);
       if (isRecord(parsed)) {
-        if (typeof parsed.id === "string") id = parsed.id;
-        if (typeof parsed.cwd === "string") cwd = parsed.cwd;
-        if (typeof parsed.timestamp === "number")
-          timestampMs = parsed.timestamp;
-        if (typeof parsed.version === "number") version = parsed.version;
+        const {
+          cwd: parsedCwd,
+          id: parsedId,
+          timestamp,
+          version: parsedVersion,
+        } = parsed;
+        if (typeof parsedId === "string") {
+          id = parsedId;
+        }
+        if (typeof parsedCwd === "string") {
+          cwd = parsedCwd;
+        }
+        if (typeof timestamp === "number") {
+          timestampMs = timestamp;
+        }
+        if (typeof parsedVersion === "number") {
+          version = parsedVersion;
+        }
       }
     } catch {
       // ignore — fall back to SessionRef-derived defaults above
     }
   }
 
-  return { version, id, cwd, timestampMs };
+  return { cwd, id, timestampMs, version };
 }
 
 /**
@@ -133,17 +148,23 @@ function resolveActiveLane(laneMoves: LaneMove[]): {
   leafId: string | undefined;
   otherLaneCount: number;
 } {
-  if (laneMoves.length === 0) return { leafId: undefined, otherLaneCount: 0 };
+  if (laneMoves.length === 0) {
+    return { leafId: undefined, otherLaneCount: 0 };
+  }
 
   const latestByLane = new Map<string, LaneMove>();
   for (const move of laneMoves) {
     const current = latestByLane.get(move.laneId);
-    if (!current || move.seq > current.seq) latestByLane.set(move.laneId, move);
+    if (!current || move.seq > current.seq) {
+      latestByLane.set(move.laneId, move);
+    }
   }
 
   let active: LaneMove | undefined;
   for (const move of latestByLane.values()) {
-    if (!active || move.seq > active.seq) active = move;
+    if (!active || move.seq > active.seq) {
+      active = move;
+    }
   }
 
   return {
@@ -168,16 +189,20 @@ function resolveActiveLane(laneMoves: LaneMove[]): {
 function checkSystemBUsageCrossCheck(
   turns: readonly Turn[],
   usageRecords: readonly UsageRecordSample[],
-  warnings: ParseWarning[],
+  warnings: ParseWarning[]
 ): void {
-  if (usageRecords.length === 0) return;
+  if (usageRecords.length === 0) {
+    return;
+  }
 
   const last = usageRecords.reduce((a, b) => (b.seq > a.seq ? b : a));
   const cumulative = toNumber(prop(last.usage, "totalTokens"));
 
   let sum = 0;
   for (const turn of turns) {
-    if (turn.contextTotal === 0) continue;
+    if (turn.contextTotal === 0) {
+      continue;
+    }
     sum += turn.contextTotal + turn.usage.output;
   }
 
@@ -198,10 +223,11 @@ function checkSystemBUsageCrossCheck(
  * inline mutation-log lines (see test/unit/pi-systemb.test.ts) without
  * needing a fixture file on disk.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Mutation-kind dispatch is intentionally explicit and tolerant.
 export function parseSystemBSession(
   ref: SessionRef,
   lines: string[],
-  spansEnabled: boolean,
+  spansEnabled: boolean
 ): ParseResult {
   const header = parseSystemBHeader(ref, lines[0]);
   const warnings: ParseWarning[] = [];
@@ -210,10 +236,12 @@ export function parseSystemBSession(
   const laneMoves: LaneMove[] = [];
   const usageRecords: UsageRecordSample[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 1; i < lines.length; i += 1) {
     const raw = lines[i];
     const lineNo = i + 1;
-    if (raw === undefined || raw.trim() === "") continue;
+    if (raw === undefined || raw.trim() === "") {
+      continue;
+    }
 
     let parsed: unknown;
     try {
@@ -221,8 +249,8 @@ export function parseSystemBSession(
     } catch {
       warnings.push({
         code: "pi-systemb-malformed-line",
-        message: "System B mutation line is not valid JSON",
         line: lineNo,
+        message: "System B mutation line is not valid JSON",
       });
       continue;
     }
@@ -230,21 +258,18 @@ export function parseSystemBSession(
     if (!isRecord(parsed)) {
       warnings.push({
         code: "pi-systemb-malformed-line",
-        message: "System B mutation line is not a JSON object",
         line: lineNo,
+        message: "System B mutation line is not a JSON object",
       });
       continue;
     }
 
-    const kind = parsed.kind;
-    const seq = typeof parsed.seq === "number" ? parsed.seq : lineNo;
+    const { kind, seq: parsedSeq } = parsed;
+    const seq = typeof parsedSeq === "number" ? parsedSeq : lineNo;
 
     switch (kind) {
       case "entry": {
-        const type = parsed.type;
-        const id = parsed.id;
-        const parentId = parsed.parentId;
-        const timestampMsRaw = parsed.timestamp;
+        const { id, parentId, timestamp: timestampMsRaw, type } = parsed;
         if (
           typeof type !== "string" ||
           typeof id !== "string" ||
@@ -254,8 +279,8 @@ export function parseSystemBSession(
         ) {
           warnings.push({
             code: "pi-systemb-malformed-entry",
-            message: "System B entry mutation is missing required fields",
             line: lineNo,
+            message: "System B entry mutation is missing required fields",
             ...(typeof type === "string" ? { recordType: type } : {}),
           });
           break;
@@ -272,7 +297,7 @@ export function parseSystemBSession(
           ...data
         } = parsed;
         entries.set(id, {
-          type,
+          data,
           id,
           parentId,
           // ASSUMPTION (recon: unix-ms for System B timestamps): converted to
@@ -280,22 +305,21 @@ export function parseSystemBSession(
           // System A, declared as `string`) stays uniform — the numeric wire
           // value is not otherwise needed, `new Date(...)` round-trips it.
           timestamp: new Date(timestampMsRaw).toISOString(),
-          data,
+          type,
         });
         break;
       }
       case "lane": {
-        const laneId = parsed.laneId;
-        const entryId = parsed.entryId;
+        const { entryId, laneId } = parsed;
         if (typeof laneId !== "string" || typeof entryId !== "string") {
           warnings.push({
             code: "pi-systemb-malformed-lane",
-            message: "System B lane mutation is missing laneId/entryId",
             line: lineNo,
+            message: "System B lane mutation is missing laneId/entryId",
           });
           break;
         }
-        laneMoves.push({ laneId, entryId, seq });
+        laneMoves.push({ entryId, laneId, seq });
         break;
       }
       case "record": {
@@ -314,9 +338,9 @@ export function parseSystemBSession(
         const kindStr = typeof kind === "string" ? kind : undefined;
         warnings.push({
           code: "pi-systemb-unknown-kind",
-          message: `unrecognized System B mutation kind: ${kindStr ?? "(missing)"}`,
           line: lineNo,
-          ...(kindStr !== undefined ? { recordType: kindStr } : {}),
+          message: `unrecognized System B mutation kind: ${kindStr ?? "(missing)"}`,
+          ...(kindStr === undefined ? {} : { recordType: kindStr }),
         });
       }
     }
@@ -329,7 +353,7 @@ export function parseSystemBSession(
       message: `${otherLaneCount} other lane(s) ignored`,
     });
   }
-  const path = leafId !== undefined ? pathToRoot(entries, leafId) : [];
+  const path = leafId === undefined ? [] : pathToRoot(entries, leafId);
 
   const turns: Turn[] = [];
   const events: SessionEvent[] = [];
@@ -340,7 +364,9 @@ export function parseSystemBSession(
 
   for (const id of path) {
     const entry = entries.get(id);
-    if (!entry) continue;
+    if (!entry) {
+      continue;
+    }
 
     switch (entry.type) {
       case "message": {
@@ -348,7 +374,7 @@ export function parseSystemBSession(
           entry,
           lastKnownModel,
           pendingSpans,
-          spansEnabled,
+          spansEnabled
         );
         if (!built) {
           warnings.push({
@@ -359,7 +385,9 @@ export function parseSystemBSession(
           break;
         }
         turns.push(built.turn);
-        if (built.newModel !== undefined) lastKnownModel = built.newModel;
+        if (built.newModel !== undefined) {
+          lastKnownModel = built.newModel;
+        }
         if (built.turn.role === "assistant") {
           pendingSpans = [];
         } else if (spansEnabled) {
@@ -374,7 +402,7 @@ export function parseSystemBSession(
         events.push(buildCompactionEvent(entry, turns.length));
         if (spansEnabled) {
           pendingSpans.push(
-            ...extractCompactionSummarySpans(prop(entry.data, "summary")),
+            ...extractCompactionSummarySpans(prop(entry.data, "summary"))
           );
         }
         // "retainedTail length noted" (task spec) — the retained
@@ -412,24 +440,24 @@ export function parseSystemBSession(
 
   checkSystemBUsageCrossCheck(turns, usageRecords, warnings);
 
-  const lastPathId = path[path.length - 1];
+  const lastPathId = path.at(-1);
   const lastEntry =
-    lastPathId !== undefined ? entries.get(lastPathId) : undefined;
+    lastPathId === undefined ? undefined : entries.get(lastPathId);
   const endedAt = lastEntry
     ? new Date(lastEntry.timestamp)
     : new Date(header.timestampMs);
 
   const session: Session = {
-    harness: "pi",
-    harnessVersion: header.version !== undefined ? String(header.version) : "4",
-    id: header.id,
-    cwd: header.cwd,
-    startedAt: new Date(header.timestampMs),
-    endedAt,
-    configSnapshot: { model: lastKnownModel, modelChanges: [] },
-    turns,
-    events,
     children: [],
+    configSnapshot: { model: lastKnownModel, modelChanges: [] },
+    cwd: header.cwd,
+    endedAt,
+    events,
+    harness: "pi",
+    harnessVersion: header.version === undefined ? "4" : String(header.version),
+    id: header.id,
+    startedAt: new Date(header.timestampMs),
+    turns,
     warnings,
   };
 

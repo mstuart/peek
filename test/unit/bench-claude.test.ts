@@ -23,14 +23,14 @@ function makeTrial(overrides: Partial<TrialSpec> = {}): TrialSpec {
   const task: BenchTask = {
     name: "fix-flaky-test",
     prompt: "Fix the failing test in tests/date.test.ts",
-    verify: "npm test",
     timeoutS: 600,
+    verify: "npm test",
   };
   return {
-    task,
     configName: "current",
-    workspaceDir: "/tmp/bench-workspace",
+    task,
     timeoutS: 600,
+    workspaceDir: "/tmp/bench-workspace",
     ...overrides,
   };
 }
@@ -41,13 +41,13 @@ function procResult(
     timedOut: boolean;
     stdout: string;
     stderrTail: string;
-  }> = {},
+  }> = {}
 ) {
   return {
     exitCode: 0,
-    timedOut: false,
-    stdout: "{}",
     stderrTail: "",
+    stdout: "{}",
+    timedOut: false,
     ...over,
   };
 }
@@ -72,7 +72,7 @@ describe("claudeRunner: flag assembly", () => {
         "--permission-mode",
         "acceptEdits",
       ],
-      { cwd: "/tmp/bench-workspace", timeoutMs: 600_000 },
+      { cwd: "/tmp/bench-workspace", timeoutMs: 600_000 }
     );
   });
 
@@ -93,7 +93,7 @@ describe("claudeRunner: flag assembly", () => {
   it("appends both flags, budget before model, when both are set", async () => {
     spawnDetachedMock.mockResolvedValue(procResult());
     await claudeRunner.run(
-      makeTrial({ perTrialBudgetUsd: 1, model: "claude-sonnet-5" }),
+      makeTrial({ model: "claude-sonnet-5", perTrialBudgetUsd: 1 })
     );
     const args = spawnDetachedMock.mock.calls[0]?.[1] as string[];
     expect(args).toEqual([
@@ -134,7 +134,7 @@ describe("claudeRunner: timeout propagation", () => {
 
   it("surfaces proc.timedOut on the outcome untouched", async () => {
     spawnDetachedMock.mockResolvedValue(
-      procResult({ timedOut: true, exitCode: null, stderrTail: "killed" }),
+      procResult({ exitCode: null, stderrTail: "killed", timedOut: true })
     );
     const outcome = await claudeRunner.run(makeTrial());
     expect(outcome.timedOut).toBe(true);
@@ -152,26 +152,26 @@ describe("claudeRunner: stdout parsing", () => {
 
   it("parses a valid result JSON, preserves it whole as raw", async () => {
     const resultJson = {
-      session_id: "sess-abc-123",
       permission_denials: [],
       result: "done",
+      session_id: "sess-abc-123",
     };
     spawnDetachedMock.mockResolvedValue(
-      procResult({ stdout: JSON.stringify(resultJson) }),
+      procResult({ stdout: JSON.stringify(resultJson) })
     );
     const outcome = await claudeRunner.run(makeTrial());
     expect(outcome.raw).toEqual(resultJson);
   });
 
   it("constructs the transcript path from session_id and workspaceDir, and resolves sessionPath when it exists", async () => {
-    const resultJson = { session_id: "sess-abc-123", permission_denials: [] };
+    const resultJson = { permission_denials: [], session_id: "sess-abc-123" };
     spawnDetachedMock.mockResolvedValue(
-      procResult({ stdout: JSON.stringify(resultJson) }),
+      procResult({ stdout: JSON.stringify(resultJson) })
     );
     existsSyncMock.mockReturnValue(true);
 
     const outcome = await claudeRunner.run(
-      makeTrial({ workspaceDir: "/Users/mark/git/peek" }),
+      makeTrial({ workspaceDir: "/Users/mark/git/peek" })
     );
 
     const expectedPath = path.join(
@@ -179,16 +179,16 @@ describe("claudeRunner: stdout parsing", () => {
       ".claude",
       "projects",
       "-Users-mark-git-peek",
-      "sess-abc-123.jsonl",
+      "sess-abc-123.jsonl"
     );
     expect(outcome.sessionPath).toBe(expectedPath);
     expect(existsSyncMock).toHaveBeenCalledWith(expectedPath);
   });
 
   it("leaves sessionPath undefined when the constructed transcript path does not exist", async () => {
-    const resultJson = { session_id: "sess-missing", permission_denials: [] };
+    const resultJson = { permission_denials: [], session_id: "sess-missing" };
     spawnDetachedMock.mockResolvedValue(
-      procResult({ stdout: JSON.stringify(resultJson) }),
+      procResult({ stdout: JSON.stringify(resultJson) })
     );
     existsSyncMock.mockReturnValue(false);
 
@@ -198,7 +198,7 @@ describe("claudeRunner: stdout parsing", () => {
 
   it("leaves sessionPath undefined when session_id is absent from otherwise-valid JSON", async () => {
     spawnDetachedMock.mockResolvedValue(
-      procResult({ stdout: JSON.stringify({ permission_denials: [] }) }),
+      procResult({ stdout: JSON.stringify({ permission_denials: [] }) })
     );
     const outcome = await claudeRunner.run(makeTrial());
     expect(outcome.sessionPath).toBeUndefined();
@@ -209,9 +209,9 @@ describe("claudeRunner: stdout parsing", () => {
     spawnDetachedMock.mockResolvedValue(
       procResult({
         exitCode: 1,
-        stdout: "not json{{{",
         stderrTail: "parse error upstream\n",
-      }),
+        stdout: "not json{{{",
+      })
     );
     const outcome = await claudeRunner.run(makeTrial());
     expect(outcome.exitCode).toBe(1);
@@ -257,14 +257,14 @@ describe("claude project-dir slug construction (real local data)", () => {
       for (const dirName of realDirNames) {
         expect(slugifyCwd(decodeSlug(dirName))).toBe(dirName);
       }
-    },
+    }
   );
 
   it.skipIf(realDirNames.length > 0)(
     "skipped: no ~/.claude/projects directories available to sample on this machine",
     () => {
       expect(true).toBe(true);
-    },
+    }
   );
 });
 
@@ -275,10 +275,10 @@ describe("slugifyCwd non-alphanumeric mapping (self-hosted gate regression)", ()
     );
     const p = transcriptPathForTest(
       "/Users/mark/.cache/peek-bench-scratch/hello-file-current-t0-1",
-      "abc-123",
+      "abc-123"
     );
     expect(p).toContain(
-      "-Users-mark--cache-peek-bench-scratch-hello-file-current-t0-1",
+      "-Users-mark--cache-peek-bench-scratch-hello-file-current-t0-1"
     );
     expect(p).not.toContain(".cache");
   });

@@ -32,7 +32,9 @@ import type { CompositionCategory, Span, TurnRole } from "../../model/types.js";
 const SPAN_TEXT_CAP = 2000;
 
 function getProp(obj: unknown, key: string): unknown {
-  if (typeof obj !== "object" || obj === null) return undefined;
+  if (typeof obj !== "object" || obj === null) {
+    return;
+  }
   return (obj as Record<string, unknown>)[key];
 }
 
@@ -41,7 +43,7 @@ function makeSpan(
   text: string,
   turnRole: TurnRole,
   truncated: boolean,
-  toolName?: string,
+  toolName?: string
 ): Span {
   const charCount = text.length;
   return {
@@ -52,7 +54,7 @@ function makeSpan(
     turnRole,
     // pi has no MCP servers (docs/recon/pi.md) — toolName is set, mcpServer
     // never is.
-    ...(toolName !== undefined ? { toolName } : {}),
+    ...(toolName === undefined ? {} : { toolName }),
   };
 }
 
@@ -62,14 +64,22 @@ function makeSpan(
  * Non-text blocks are JSON.stringify'd so their size is still counted rather
  * than silently dropped. */
 function flattenTextContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
   return content
     .map((block) => {
-      if (typeof block === "string") return block;
+      if (typeof block === "string") {
+        return block;
+      }
       if (getProp(block, "type") === "text") {
         const text = getProp(block, "text");
-        if (typeof text === "string") return text;
+        if (typeof text === "string") {
+          return text;
+        }
       }
       return JSON.stringify(block);
     })
@@ -80,7 +90,9 @@ function flattenTextContent(content: unknown): string {
  * text items, per docs/recon/pi.md). Empty/absent content yields no span. */
 export function extractUserMessageSpans(content: unknown): Span[] {
   const text = flattenTextContent(content);
-  if (text.length === 0) return [];
+  if (text.length === 0) {
+    return [];
+  }
   return [makeSpan("userText", text, "user", false)];
 }
 
@@ -91,7 +103,9 @@ export function extractUserMessageSpans(content: unknown): Span[] {
  * category is tagged here; composition.ts zeroes it for pi (thinking is
  * stripped on resend, never future input). */
 export function extractAssistantMessageSpans(content: unknown): Span[] {
-  if (!Array.isArray(content)) return [];
+  if (!Array.isArray(content)) {
+    return [];
+  }
   const spans: Span[] = [];
 
   for (const block of content) {
@@ -135,7 +149,7 @@ export function extractAssistantMessageSpans(content: unknown): Span[] {
  * decision to make here (docs/recon/pi.md: "pi has no dual-source issue").
  */
 export function extractToolResultMessageSpans(
-  message: Record<string, unknown>,
+  message: Record<string, unknown>
 ): Span[] {
   const text = flattenTextContent(message.content);
   const toolName =
@@ -154,9 +168,11 @@ export function extractToolResultMessageSpans(
  * every future call site to remember to ignore a zero-value span.
  */
 export function extractBashExecutionMessageSpans(
-  message: Record<string, unknown>,
+  message: Record<string, unknown>
 ): Span[] {
-  if (message.excludeFromContext === true) return [];
+  if (message.excludeFromContext === true) {
+    return [];
+  }
 
   const command = typeof message.command === "string" ? message.command : "";
   const output = typeof message.output === "string" ? message.output : "";
@@ -181,11 +197,15 @@ export function extractBashExecutionMessageSpans(
  */
 export function extractCustomContentSpans(
   content: unknown,
-  display: unknown,
+  display: unknown
 ): Span[] {
-  if (display !== true) return [];
+  if (display !== true) {
+    return [];
+  }
   const text = flattenTextContent(content);
-  if (text.length === 0) return [];
+  if (text.length === 0) {
+    return [];
+  }
   return [makeSpan("coordination", text, "user", false)];
 }
 
@@ -197,7 +217,9 @@ export function extractCustomContentSpans(
  */
 export function extractCompactionSummarySpans(summary: unknown): Span[] {
   const text = typeof summary === "string" ? summary : "";
-  if (text.length === 0) return [];
+  if (text.length === 0) {
+    return [];
+  }
   return [makeSpan("compactionSummaries", text, "user", false)];
 }
 
@@ -206,7 +228,7 @@ export function extractCompactionSummarySpans(summary: unknown): Span[] {
  * whose spans parse.ts computes separately (they attach to the assistant's
  * own Turn immediately, not via the pending-spans mechanism). */
 export function extractPendingMessageSpans(
-  message: Record<string, unknown>,
+  message: Record<string, unknown>
 ): Span[] {
   switch (message.role) {
     case "user":

@@ -8,14 +8,14 @@ import {
 
 describe("formatNumber", () => {
   it("groups thousands with commas", () => {
-    expect(formatNumber(12345)).toBe("12,345");
-    expect(formatNumber(1000000)).toBe("1,000,000");
+    expect(formatNumber(12_345)).toBe("12,345");
+    expect(formatNumber(1_000_000)).toBe("1,000,000");
     expect(formatNumber(0)).toBe("0");
     expect(formatNumber(42)).toBe("42");
   });
 
   it("preserves the sign on negative numbers", () => {
-    expect(formatNumber(-12345)).toBe("-12,345");
+    expect(formatNumber(-12_345)).toBe("-12,345");
   });
 });
 
@@ -26,8 +26,8 @@ describe("formatCompact", () => {
   });
 
   it("renders k/M ranges with one decimal", () => {
-    expect(formatCompact(37481)).toBe("37.5k");
-    expect(formatCompact(1200000)).toBe("1.2M");
+    expect(formatCompact(37_481)).toBe("37.5k");
+    expect(formatCompact(1_200_000)).toBe("1.2M");
   });
 
   it("preserves the sign on negative values", () => {
@@ -56,13 +56,13 @@ describe("renderTable", () => {
   it("right-aligns a numeric column so shorter values line up at the same column position", () => {
     const table = renderTable(
       [
-        { header: "name", align: "left" },
-        { header: "tokens", align: "right" },
+        { align: "left", header: "name" },
+        { align: "right", header: "tokens" },
       ],
       [
         ["userText", "10"],
         ["assistantTextLong", "1,729"],
-      ],
+      ]
     );
     // Header uses picocolors (may carry ANSI codes depending on TTY
     // detection) — only the two plain data rows are asserted on here.

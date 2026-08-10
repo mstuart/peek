@@ -27,7 +27,9 @@ export function defaultRoot(): string {
 function decodeCwdSlug(dirName: string): string | undefined {
   const match = SLUG_DIR_RE.exec(dirName);
   const slug = match?.[1];
-  if (!slug) return undefined;
+  if (!slug) {
+    return;
+  }
   return `/${slug.split("-").join("/")}`;
 }
 
@@ -43,6 +45,7 @@ async function collectJsonlFiles(dir: string): Promise<string[]> {
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
+      // biome-ignore lint/performance/noAwaitInLoops: Keep recursive filesystem traversal bounded.
       files.push(...(await collectJsonlFiles(full)));
     } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
       files.push(full);
@@ -55,24 +58,26 @@ async function collectJsonlFiles(dir: string): Promise<string[]> {
  * under the given roots (or the default `~/.pi/agent/sessions/` layout).
  * Missing roots resolve to an empty array — never throws. */
 export async function discoverPiSessions(
-  roots?: string[],
+  roots?: string[]
 ): Promise<SessionRef[]> {
   const searchRoots = roots && roots.length > 0 ? roots : [defaultRoot()];
   const refs: SessionRef[] = [];
 
   for (const root of searchRoots) {
+    // biome-ignore lint/performance/noAwaitInLoops: Keep recursive filesystem traversal bounded.
     const files = await collectJsonlFiles(root);
     for (const filePath of files) {
       const match = SESSION_FILENAME_RE.exec(basename(filePath));
       const id = match?.[1];
-      if (!id) continue;
+      if (!id) {
+        continue;
+      }
 
       let sizeBytes: number;
       let mtime: Date;
       try {
-        const stats = await stat(filePath);
-        sizeBytes = stats.size;
-        mtime = stats.mtime;
+        // biome-ignore lint/performance/noAwaitInLoops: Keep filesystem metadata reads bounded.
+        ({ mtime, size: sizeBytes } = await stat(filePath));
       } catch {
         continue;
       }
@@ -81,12 +86,14 @@ export async function discoverPiSessions(
       const ref: SessionRef = {
         harness: "pi",
         id,
+        kind: "main",
+        mtime,
         path: filePath,
         sizeBytes,
-        mtime,
-        kind: "main",
       };
-      if (cwd !== undefined) ref.cwd = cwd;
+      if (cwd !== undefined) {
+        ref.cwd = cwd;
+      }
       refs.push(ref);
     }
   }

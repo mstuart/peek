@@ -20,10 +20,10 @@ export interface Workspace {
 }
 
 export interface SetupResult {
-  ok: boolean;
+  exitCode?: number | null;
   /** The first setup command that failed, when !ok. */
   failedCommand?: string;
-  exitCode?: number | null;
+  ok: boolean;
   stderrTail?: string;
 }
 
@@ -38,7 +38,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function isGitRepo(repoDir: string): Promise<boolean> {
+function isGitRepo(repoDir: string): Promise<boolean> {
   return pathExists(join(repoDir, ".git"));
 }
 
@@ -49,7 +49,7 @@ async function isGitRepo(repoDir: string): Promise<boolean> {
 export async function createWorkspace(
   repoDir: string,
   scratchRoot: string,
-  id: string,
+  id: string
 ): Promise<Workspace> {
   const dir = join(scratchRoot, id);
 
@@ -57,11 +57,11 @@ export async function createWorkspace(
     const result = await spawnDetached(
       "git",
       ["worktree", "add", "--detach", dir, "HEAD"],
-      { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS },
+      { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS }
     );
     if (result.exitCode !== 0) {
       throw new Error(
-        `git worktree add failed (exit ${result.exitCode}): ${result.stderrTail}`,
+        `git worktree add failed (exit ${result.exitCode}): ${result.stderrTail}`
       );
     }
     return { dir, id, isWorktree: true, repoDir };
@@ -78,14 +78,14 @@ export async function destroyWorkspace(ws: Workspace): Promise<void> {
     const result = await spawnDetached(
       "git",
       ["worktree", "remove", "--force", ws.dir],
-      { cwd: ws.repoDir, timeoutMs: GIT_TIMEOUT_MS },
+      { cwd: ws.repoDir, timeoutMs: GIT_TIMEOUT_MS }
     );
     if (result.exitCode !== 0) {
-      await rm(ws.dir, { recursive: true, force: true });
+      await rm(ws.dir, { force: true, recursive: true });
     }
     return;
   }
-  await rm(ws.dir, { recursive: true, force: true });
+  await rm(ws.dir, { force: true, recursive: true });
 }
 
 /**
@@ -95,19 +95,20 @@ export async function destroyWorkspace(ws: Workspace): Promise<void> {
 export async function runSetup(
   ws: Workspace,
   setup: string[],
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<SetupResult> {
   for (const cmd of setup) {
+    // biome-ignore lint/performance/noAwaitInLoops: Setup commands must run in declared order.
     const result: SpawnDetachedResult = await spawnDetached(
       "/bin/sh",
       ["-c", cmd],
-      { cwd: ws.dir, timeoutMs },
+      { cwd: ws.dir, timeoutMs }
     );
     if (result.exitCode !== 0) {
       return {
-        ok: false,
-        failedCommand: cmd,
         exitCode: result.exitCode,
+        failedCommand: cmd,
+        ok: false,
         stderrTail: result.stderrTail,
       };
     }
@@ -140,7 +141,7 @@ function isInsideScratchRoot(candidate: string, scratchRoot: string): boolean {
  */
 export async function sweepOrphans(
   scratchRoot: string,
-  repoDir: string,
+  repoDir: string
 ): Promise<string[]> {
   const removed = new Set<string>();
 
@@ -160,15 +161,18 @@ export async function sweepOrphans(
     const listResult = await spawnDetached(
       "git",
       ["worktree", "list", "--porcelain"],
-      { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS },
+      { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS }
     );
     const worktreePaths = parseWorktreeListPorcelain(listResult.stdout);
     for (const wtPath of worktreePaths) {
-      if (!isInsideScratchRoot(wtPath, resolvedScratchRoot)) continue;
+      if (!isInsideScratchRoot(wtPath, resolvedScratchRoot)) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: Serialize destructive worktree cleanup.
       const rmResult = await spawnDetached(
         "git",
         ["worktree", "remove", "--force", wtPath],
-        { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS },
+        { cwd: repoDir, timeoutMs: GIT_TIMEOUT_MS }
       );
       // Report the removal using the caller's (unresolved) scratchRoot
       // form rather than git's realpath'd one, so results are consistent
@@ -193,7 +197,8 @@ export async function sweepOrphans(
   }
   for (const entry of entries) {
     const full = join(scratchRoot, entry);
-    await rm(full, { recursive: true, force: true });
+    // biome-ignore lint/performance/noAwaitInLoops: Serialize destructive workspace cleanup.
+    await rm(full, { force: true, recursive: true });
     removed.add(full);
   }
 

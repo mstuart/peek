@@ -1,26 +1,27 @@
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { readClaudeRecords } from "../../src/adapters/claude/records.js";
 import type { SessionRef } from "../../src/model/types.js";
 
-const FIXTURES_ROOT = path.join(__dirname, "../fixtures/claude-code");
+const FIXTURES_ROOT = path.join(import.meta.dirname, "../fixtures/claude-code");
 
-async function refs(): Promise<SessionRef[]> {
+function refs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([FIXTURES_ROOT]);
 }
 
 function findRef(
   all: SessionRef[],
   versionDir: string,
-  id: string,
+  id: string
 ): SessionRef {
   const ref = all.find(
-    (r) =>
-      r.id === id && r.path.includes(`${path.sep}${versionDir}${path.sep}`),
+    (r) => r.id === id && r.path.includes(`${path.sep}${versionDir}${path.sep}`)
   );
-  if (!ref) throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  }
   return ref;
 }
 
@@ -59,6 +60,7 @@ describe("parseClaudeSession — warnings", () => {
       "20000000-2000-4200-8200-200000000003",
     ]) {
       const ref = findRef(all, "v2.1.225", id);
+      // biome-ignore lint/performance/noAwaitInLoops: Fixture parsing is intentionally serialized for deterministic assertions.
       const { warnings } = await parseClaudeSession(ref);
       expect(warnings).toHaveLength(0);
     }
@@ -90,7 +92,7 @@ describe("parseClaudeSession — turn counts", () => {
     const streamed = session.turns.filter(
       (t) =>
         (t.usage.raw as { message: { id: string } }).message.id ===
-        "msg-stream-0001",
+        "msg-stream-0001"
     );
     expect(streamed).toHaveLength(3);
     // usage is identical (repeated) across the streaming-split trio
@@ -108,13 +110,15 @@ describe("parseClaudeSession — turn counts", () => {
     expect(session.turns).toHaveLength(2);
     for (const t of session.turns) {
       expect((t.usage.raw as { message: { id: string } }).message.id).toBe(
-        "msg-orig-0001",
+        "msg-orig-0001"
       );
     }
     const sidechainFlags = session.turns.map(
-      (t) => (t.usage.raw as { isSidechain: boolean }).isSidechain,
+      (t) => (t.usage.raw as { isSidechain: boolean }).isSidechain
     );
-    expect(sidechainFlags.sort()).toEqual([false, true]);
+    expect(
+      sidechainFlags.sort((left, right) => Number(left) - Number(right))
+    ).toEqual([false, true]);
   });
 
   it("compaction.jsonl → 3 turns (isApiErrorMessage turn kept, not dropped)", async () => {
@@ -141,11 +145,13 @@ describe("parseClaudeSession — usage invariants", () => {
     expect(session.turns).toHaveLength(2);
 
     const [withSplit, withoutSplit] = session.turns;
-    expect(withSplit?.usage.cacheWrite1h).toBe(1000);
-    expect(withSplit?.usage.cacheWrite5m).toBe(500);
+    assert(withSplit);
+    assert(withoutSplit);
+    expect(withSplit.usage.cacheWrite1h).toBe(1000);
+    expect(withSplit.usage.cacheWrite5m).toBe(500);
 
-    expect(withoutSplit?.usage.cacheWrite1h).toBe(0);
-    expect(withoutSplit?.usage.cacheWrite5m).toBe(900);
+    expect(withoutSplit.usage.cacheWrite1h).toBe(0);
+    expect(withoutSplit.usage.cacheWrite5m).toBe(900);
   });
 
   it("iterations-multi.jsonl: turn usage sums both iterations", async () => {
@@ -153,11 +159,12 @@ describe("parseClaudeSession — usage invariants", () => {
     const ref = findRef(all, "v2.1.104", "iterations-multi");
     const { session } = await parseClaudeSession(ref);
     expect(session.turns).toHaveLength(1);
-    const turn = session.turns[0];
+    const turn = session.turns.at(0);
+    assert(turn);
     // iterations: {input:300,output:80} + {input:200,output:40} = {500,120},
     // matching (and derived independently of) the top-level mirror.
-    expect(turn?.usage.inputUncached).toBe(500);
-    expect(turn?.usage.output).toBe(120);
+    expect(turn.usage.inputUncached).toBe(500);
+    expect(turn.usage.output).toBe(120);
     expect(turn?.contextTotal).toBe(500);
   });
 
@@ -167,8 +174,8 @@ describe("parseClaudeSession — usage invariants", () => {
     const { session } = await parseClaudeSession(ref);
     expect(session.turns).toHaveLength(1);
     expect(session.turns[0]?.cacheMissReason).toEqual({
-      type: "system_changed",
       cache_missed_input_tokens: 4500,
+      type: "system_changed",
     });
   });
 
@@ -181,7 +188,7 @@ describe("parseClaudeSession — usage invariants", () => {
         t.usage.inputUncached +
           t.usage.cacheRead +
           t.usage.cacheWrite5m +
-          t.usage.cacheWrite1h,
+          t.usage.cacheWrite1h
       );
     }
   });
@@ -212,7 +219,7 @@ describe("parseClaudeSession — compaction fixture", () => {
     });
 
     const errorTurn = session.turns.find(
-      (t) => (t.usage.raw as { uuid: string }).uuid === "a-0002",
+      (t) => (t.usage.raw as { uuid: string }).uuid === "a-0002"
     );
     expect(errorTurn).toBeDefined();
     expect(errorTurn?.contextTotal).toBe(0);
@@ -232,7 +239,7 @@ describe("parseClaudeSession — cross-version + subagent children", () => {
     const v225 = findRef(
       all,
       "v2.1.225",
-      "20000000-2000-4200-8200-200000000001",
+      "20000000-2000-4200-8200-200000000001"
     );
 
     const [r104, r225] = await Promise.all([
@@ -248,14 +255,14 @@ describe("parseClaudeSession — cross-version + subagent children", () => {
     const ref = findRef(
       all,
       "v2.1.225",
-      "20000000-2000-4200-8200-200000000001",
+      "20000000-2000-4200-8200-200000000001"
     );
     const { session } = await parseClaudeSession(ref);
     expect(session.children).toHaveLength(1);
     expect(session.children[0]?.id).toBe("abc123");
     expect(session.children[0]?.kind).toBe("subagent");
     expect(session.children[0]?.parentId).toBe(
-      "20000000-2000-4200-8200-200000000001",
+      "20000000-2000-4200-8200-200000000001"
     );
   });
 
@@ -264,7 +271,7 @@ describe("parseClaudeSession — cross-version + subagent children", () => {
     const ref = findRef(
       all,
       "v2.1.225",
-      "20000000-2000-4200-8200-200000000003",
+      "20000000-2000-4200-8200-200000000003"
     );
     const { session } = await parseClaudeSession(ref);
     expect(session.children).toHaveLength(0);
@@ -320,10 +327,10 @@ describe("parseClaudeSession — spans:false lite parse", () => {
     }
 
     const fullCompactions = full.session.events.filter(
-      (e) => e.kind === "compaction",
+      (e) => e.kind === "compaction"
     );
     const liteCompactions = lite.session.events.filter(
-      (e) => e.kind === "compaction",
+      (e) => e.kind === "compaction"
     );
     expect(fullCompactions.length).toBeGreaterThan(0);
     expect(liteCompactions).toEqual(fullCompactions);

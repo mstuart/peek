@@ -19,20 +19,20 @@ import { fileURLToPath } from "node:url";
 import type { Command } from "commander";
 import pc from "picocolors";
 import {
+  buildCompareTable,
   type CompareDeltaRow,
   type CompareTable,
-  buildCompareTable,
 } from "../bench/compare.js";
 import { renderBenchReportHtml } from "../bench/reportHtml.js";
 import {
-  type ResultsWriter,
   createResultsWriter,
+  type ResultsWriter,
   readResults,
 } from "../bench/results.js";
 import {
   type ConfigVariant,
-  type OrchestrateResult,
   formatEstimateLine,
+  type OrchestrateResult,
   orchestrate,
 } from "../bench/run.js";
 import { claudeRunner } from "../bench/runners/claude.js";
@@ -58,6 +58,7 @@ import { formatNumber, renderTable } from "../render/table.js";
 // ---------------------------------------------------------------------------
 
 const RUNNABLE_HARNESS_IDS: readonly HarnessId[] = ["claude-code", "codex"];
+const YES_RE = /^y(es)?$/i;
 
 function parseBenchHarnessOption(value: string): HarnessId {
   if ((RUNNABLE_HARNESS_IDS as readonly string[]).includes(value)) {
@@ -65,7 +66,7 @@ function parseBenchHarnessOption(value: string): HarnessId {
   }
   throw new Error(
     `--harness must be one of ${RUNNABLE_HARNESS_IDS.join(", ")} (got: ${value}` +
-      `${value === "pi" ? " — pi is deferred to v2.1" : ""})`,
+      `${value === "pi" ? " — pi is deferred to v2.1" : ""})`
   );
 }
 
@@ -91,7 +92,7 @@ function parsePositiveNumber(flag: string) {
 
 function readPeekVersion(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 4; i += 1) {
     const candidate = path.join(dir, "package.json");
     try {
       const pkg = JSON.parse(readFileSync(candidate, "utf8")) as {
@@ -118,7 +119,7 @@ function runnerFor(harness: HarnessId): BenchRunner {
   const runner = RUNNERS[harness];
   if (!runner) {
     throw new Error(
-      `no bench runner wired for harness "${harness}" (pi is deferred to v2.1 — the BenchRunner interface is harness-agnostic but no pi runner exists yet)`,
+      `no bench runner wired for harness "${harness}" (pi is deferred to v2.1 — the BenchRunner interface is harness-agnostic but no pi runner exists yet)`
     );
   }
   return runner;
@@ -127,8 +128,10 @@ function runnerFor(harness: HarnessId): BenchRunner {
 /** `--config-a`/`--config-b <dir|current>` -> a named ConfigVariant. Name is
  * the resolved dir's basename ("current" stays "current"). */
 function resolveConfigVariant(arg: string): ConfigVariant {
-  if (arg === "current") return { name: "current", dir: "current" };
-  return { name: path.basename(path.resolve(arg)), dir: path.resolve(arg) };
+  if (arg === "current") {
+    return { dir: "current", name: "current" };
+  }
+  return { dir: path.resolve(arg), name: path.basename(path.resolve(arg)) };
 }
 
 /** Disambiguates configA/configB when they'd otherwise share a display name
@@ -137,7 +140,7 @@ function resolveConfigVariant(arg: string): ConfigVariant {
  * two distinct configs' trials into one cell. */
 function resolveConfigPair(
   aArg: string,
-  bArg: string,
+  bArg: string
 ): [ConfigVariant, ConfigVariant] {
   const a = resolveConfigVariant(aArg);
   const b = resolveConfigVariant(bArg);
@@ -155,8 +158,12 @@ function resolveConfigPair(
 // ---------------------------------------------------------------------------
 
 function deltaLabel(label: string): string {
-  if (label.startsWith("+")) return pc.green(label);
-  if (label.startsWith("-")) return pc.red(label);
+  if (label.startsWith("+")) {
+    return pc.green(label);
+  }
+  if (label.startsWith("-")) {
+    return pc.red(label);
+  }
   return label;
 }
 
@@ -185,7 +192,7 @@ export function deltaRowToCells(row: CompareDeltaRow): string[] {
 
 export function printCompareTable(table: CompareTable): void {
   process.stdout.write(
-    `\npeek bench — ${pc.bold(table.configA)} (a) vs ${pc.bold(table.configB)} (b)\n\n`,
+    `\npeek bench — ${pc.bold(table.configA)} (a) vs ${pc.bold(table.configB)} (b)\n\n`
   );
 
   if (table.missing.length > 0) {
@@ -194,29 +201,29 @@ export function printCompareTable(table: CompareTable): void {
         `note: ${table.missing.length} task(s) missing from one side — ${table.missing
           .map(
             (m) =>
-              `${m.taskName} (no trials for ${m.missingConfig === "a" ? table.configA : table.configB})`,
+              `${m.taskName} (no trials for ${m.missingConfig === "a" ? table.configA : table.configB})`
           )
-          .join(", ")}\n\n`,
-      ),
+          .join(", ")}\n\n`
+      )
     );
   }
 
   const columns = [
     { header: "task" },
-    { header: "success a", align: "right" as const },
-    { header: "success b", align: "right" as const },
+    { align: "right" as const, header: "success a" },
+    { align: "right" as const, header: "success b" },
     { header: "Δ" },
-    { header: "wall a", align: "right" as const },
-    { header: "wall b", align: "right" as const },
+    { align: "right" as const, header: "wall a" },
+    { align: "right" as const, header: "wall b" },
     { header: "Δ" },
-    { header: "tokens a", align: "right" as const },
-    { header: "tokens b", align: "right" as const },
+    { align: "right" as const, header: "tokens a" },
+    { align: "right" as const, header: "tokens b" },
     { header: "Δ" },
-    { header: "cost a", align: "right" as const },
-    { header: "cost b", align: "right" as const },
+    { align: "right" as const, header: "cost a" },
+    { align: "right" as const, header: "cost b" },
     { header: "Δ" },
-    { header: "compactions a", align: "right" as const },
-    { header: "compactions b", align: "right" as const },
+    { align: "right" as const, header: "compactions a" },
+    { align: "right" as const, header: "compactions b" },
     { header: "Δ" },
   ];
 
@@ -237,33 +244,35 @@ export function printCompareTable(table: CompareTable): void {
 // ---------------------------------------------------------------------------
 
 async function confirmRun(promptText: string): Promise<boolean> {
-  if (!process.stdin.isTTY) return false;
+  if (!process.stdin.isTTY) {
+    return false;
+  }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const answer = await rl.question(`${promptText} [y/N] `);
-    return /^y(es)?$/i.test(answer.trim());
+    return YES_RE.test(answer.trim());
   } finally {
     rl.close();
   }
 }
 
 export interface BenchRunCommandOptions {
-  suite: string;
   configA: string;
   configB: string;
   harness?: HarnessId;
-  trials?: number;
-  timeout?: number;
+  json?: boolean;
   maxCost?: number;
-  yes?: boolean;
+  repo?: string; // test-only escape hatch; defaults to process.cwd()
+  suite: string;
+  timeout?: number;
+  trials?: number;
+  /** Test-only escape hatch: overrides the XDG trust-store path (see bench/trust.ts). */
+  trustStorePathOverride?: string;
   /** Trusts this suite (records its content hash) without the interactive trust prompt — the
    * only way to get past a first-seen/changed suite non-interactively. Distinct from `--yes`,
    * which only skips the cost-estimate confirm below and never bypasses the trust gate. */
   trustSuite?: boolean;
-  json?: boolean;
-  repo?: string; // test-only escape hatch; defaults to process.cwd()
-  /** Test-only escape hatch: overrides the XDG trust-store path (see bench/trust.ts). */
-  trustStorePathOverride?: string;
+  yes?: boolean;
 }
 
 /**
@@ -281,7 +290,7 @@ export async function ensureSuiteTrusted(
   options: BenchRunCommandOptions,
   suite: Awaited<ReturnType<typeof loadSuite>>,
   configA: ConfigVariant,
-  configB: ConfigVariant,
+  configB: ConfigVariant
 ): Promise<boolean> {
   const hash = await computeSuiteHash(options.suite, [configA, configB]);
   if (await isSuiteTrusted(hash, options.trustStorePathOverride)) {
@@ -294,16 +303,16 @@ export async function ensureSuiteTrusted(
   }
 
   process.stderr.write(
-    `${await formatTrustPrompt(options.suite, suite, [configA, configB])}\n`,
+    `${await formatTrustPrompt(options.suite, suite, [configA, configB])}\n`
   );
   const trusted = await confirmRun("Trust this suite?"); // confirmRun appends " [y/N] " itself
   if (!trusted) {
-    if (!process.stdin.isTTY) {
-      process.stderr.write(
-        "aborted — this suite is not yet trusted and stdin is not a TTY; re-run with --trust-suite to trust it non-interactively\n",
-      );
-    } else {
+    if (process.stdin.isTTY) {
       process.stderr.write("aborted — suite not trusted\n");
+    } else {
+      process.stderr.write(
+        "aborted — this suite is not yet trusted and stdin is not a TTY; re-run with --trust-suite to trust it non-interactively\n"
+      );
     }
     process.exitCode = 1;
     return false;
@@ -313,7 +322,7 @@ export async function ensureSuiteTrusted(
 }
 
 export async function runBenchRunCommand(
-  options: BenchRunCommandOptions,
+  options: BenchRunCommandOptions
 ): Promise<void> {
   const harness = options.harness ?? "claude-code";
   const runner = runnerFor(harness);
@@ -323,7 +332,7 @@ export async function runBenchRunCommand(
   }
   const [configA, configB] = resolveConfigPair(
     options.configA,
-    options.configB,
+    options.configB
   );
 
   if (!(await ensureSuiteTrusted(options, suite, configA, configB))) {
@@ -349,32 +358,35 @@ export async function runBenchRunCommand(
   process.stderr.write(`writing results to ${resultsWriter.path}\n`);
 
   const orchestrateOpts: Parameters<typeof orchestrate>[0] = {
-    suite,
     configs: [configA, configB],
     harness,
-    runner,
-    repoDir,
-    trials,
-    resultsWriter,
     onProgress: (event) => {
       if (event.kind === "trial-start") {
         process.stderr.write(
-          `[${event.trialIndex + 1}] ${event.taskName} / ${event.configName} — starting\n`,
+          `[${event.trialIndex + 1}] ${event.taskName} / ${event.configName} — starting\n`
         );
       } else if (event.kind === "trial-end") {
         const r = event.result;
         const status = r.verify.passed ? pc.green("pass") : pc.red("fail");
         process.stderr.write(
-          `  -> ${status} (exit ${r.exitCode ?? "null"}${r.timedOut ? ", timed out" : ""}, wall ${(r.wallMs / 1000).toFixed(1)}s)\n`,
+          `  -> ${status} (exit ${r.exitCode ?? "null"}${r.timedOut ? ", timed out" : ""}, wall ${(r.wallMs / 1000).toFixed(1)}s)\n`
         );
       } else {
         process.stderr.write(pc.yellow(`aborted: ${event.reason}\n`));
       }
     },
+    repoDir,
+    resultsWriter,
+    runner,
+    suite,
+    trials,
   };
-  if (options.timeout !== undefined) orchestrateOpts.timeoutS = options.timeout;
-  if (options.maxCost !== undefined)
+  if (options.timeout !== undefined) {
+    orchestrateOpts.timeoutS = options.timeout;
+  }
+  if (options.maxCost !== undefined) {
     orchestrateOpts.maxCostUsd = options.maxCost;
+  }
 
   const outcome: OrchestrateResult = await orchestrate(orchestrateOpts);
 
@@ -382,7 +394,7 @@ export async function runBenchRunCommand(
 
   if (options.json) {
     process.stdout.write(
-      `${serializeJSON({ resultsPath: resultsWriter.path, aborted: outcome.aborted, abortReason: outcome.abortReason, table })}\n`,
+      `${serializeJSON({ aborted: outcome.aborted, abortReason: outcome.abortReason, resultsPath: resultsWriter.path, table })}\n`
     );
     return;
   }
@@ -400,24 +412,28 @@ export async function runBenchRunCommand(
 export interface BenchReportCommandOptions {
   configA?: string;
   configB?: string;
-  output?: string;
   json?: boolean;
+  output?: string;
 }
 
 /** First two distinct configNames in file order — used when --config-a/
  * --config-b aren't given explicitly. */
 function inferConfigPair(
-  results: readonly { configName: string }[],
+  results: readonly { configName: string }[]
 ): [string, string] {
   const seen: string[] = [];
   for (const r of results) {
-    if (!seen.includes(r.configName)) seen.push(r.configName);
-    if (seen.length === 2) break;
+    if (!seen.includes(r.configName)) {
+      seen.push(r.configName);
+    }
+    if (seen.length === 2) {
+      break;
+    }
   }
   const [a, b] = seen;
   if (a === undefined || b === undefined) {
     throw new Error(
-      `results file has fewer than 2 distinct configs — pass --config-a/--config-b explicitly, or check the file (found: ${seen.join(", ") || "none"})`,
+      `results file has fewer than 2 distinct configs — pass --config-a/--config-b explicitly, or check the file (found: ${seen.join(", ") || "none"})`
     );
   }
   return [a, b];
@@ -425,15 +441,15 @@ function inferConfigPair(
 
 export async function runBenchReportCommand(
   resultsPath: string,
-  options: BenchReportCommandOptions,
+  options: BenchReportCommandOptions
 ): Promise<void> {
   const { results, warnings } = await readResults(resultsPath);
   if (warnings.length > 0) {
     process.stderr.write(
       pc.yellow(
         `warning: ${warnings.length} unparseable line(s) in ${resultsPath} (torn/partial run?) — ` +
-          `lines: ${warnings.map((w) => w.line).join(", ")}\n`,
-      ),
+          `lines: ${warnings.map((w) => w.line).join(", ")}\n`
+      )
     );
   }
 
@@ -452,9 +468,10 @@ export async function runBenchReportCommand(
 
   if (options.output !== undefined) {
     const html = renderBenchReportHtml(table, {
+      generatedAtISO: new Date().toISOString(),
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: Results may be empty when rendering a partial run.
       harness: results[0]?.harness ?? "unknown",
       peekVersion: readPeekVersion(),
-      generatedAtISO: new Date().toISOString(),
     });
     await writeFile(options.output, html, "utf8");
     process.stdout.write(`${path.resolve(options.output)}\n`);
@@ -471,7 +488,7 @@ export interface BenchCleanCommandOptions {
 }
 
 export async function runBenchCleanCommand(
-  options: BenchCleanCommandOptions,
+  options: BenchCleanCommandOptions
 ): Promise<void> {
   const { defaultScratchRoot } = await import("../bench/run.js");
   const repoDir = options.repo ?? process.cwd();
@@ -482,9 +499,11 @@ export async function runBenchCleanCommand(
     return;
   }
   process.stdout.write(
-    `removed ${formatNumber(removed.length)} orphaned workspace(s):\n`,
+    `removed ${formatNumber(removed.length)} orphaned workspace(s):\n`
   );
-  for (const p of removed) process.stdout.write(`  ${p}\n`);
+  for (const p of removed) {
+    process.stdout.write(`  ${p}\n`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +515,7 @@ export function registerBenchCommand(program: Command): void {
     .command("bench")
     .description(
       "Config A/B regression bench: re-run your own task suite under two config variants " +
-        "and diff the results (success rate, tokens, cost, compactions) via peek's own adapters.",
+        "and diff the results (success rate, tokens, cost, compactions) via peek's own adapters."
     );
 
   bench
@@ -506,75 +525,79 @@ export function registerBenchCommand(program: Command): void {
         "estimate and a confirm prompt (skip with --yes). A first-run or changed suite ALSO " +
         "requires a separate trust confirmation (every setup/verify command shown verbatim) " +
         "before anything executes — --yes does not skip this; use --trust-suite for " +
-        "non-interactive runs.",
+        "non-interactive runs."
     )
     .requiredOption(
       "--suite <dir>",
-      "directory of .peek/bench/*.json task files",
+      "directory of .peek/bench/*.json task files"
     )
     .requiredOption(
       "--config-a <dir|current>",
-      '"current" = the repo\'s own config, unmodified',
+      '"current" = the repo\'s own config, unmodified'
     )
     .requiredOption(
       "--config-b <dir|current>",
-      "the second config variant to compare against a",
+      "the second config variant to compare against a"
     )
     .option(
       "--harness <harness>",
       "claude-code | codex (pi deferred to v2.1) — default claude-code",
-      parseBenchHarnessOption,
+      parseBenchHarnessOption
     )
     .option(
       "--trials <n>",
       "trials per task per config — default 1",
-      parsePositiveInt("--trials"),
+      parsePositiveInt("--trials")
     )
     .option(
       "--timeout <seconds>",
       "override every task's timeoutS",
-      parsePositiveInt("--timeout"),
+      parsePositiveInt("--timeout")
     )
     .option(
       "--max-cost <usd>",
       "abort BETWEEN trials once running parsed spend reaches this ceiling (best-effort)",
-      parsePositiveNumber("--max-cost"),
+      parsePositiveNumber("--max-cost")
     )
     .option(
       "--yes",
-      "skip the cost-estimate confirm prompt (NOT the trust prompt below)",
+      "skip the cost-estimate confirm prompt (NOT the trust prompt below)"
     )
     .option(
       "--trust-suite",
       "trust this suite's content hash (setup/verify commands + config overlays) without " +
-        "the interactive prompt — required to run a first-seen/changed suite non-interactively",
+        "the interactive prompt — required to run a first-seen/changed suite non-interactively"
     )
     .option(
       "--json",
-      "emit the full computed structure as JSON instead of a text table",
+      "emit the full computed structure as JSON instead of a text table"
     )
     .action(async (opts) => {
       try {
         const commandOpts: BenchRunCommandOptions = {
-          suite: opts.suite as string,
           configA: opts.configA as string,
           configB: opts.configB as string,
-          yes: Boolean(opts.yes),
-          trustSuite: Boolean(opts.trustSuite),
           json: Boolean(opts.json),
+          suite: opts.suite as string,
+          trustSuite: Boolean(opts.trustSuite),
+          yes: Boolean(opts.yes),
         };
-        if (opts.harness !== undefined)
+        if (opts.harness !== undefined) {
           commandOpts.harness = opts.harness as HarnessId;
-        if (opts.trials !== undefined)
+        }
+        if (opts.trials !== undefined) {
           commandOpts.trials = opts.trials as number;
-        if (opts.timeout !== undefined)
+        }
+        if (opts.timeout !== undefined) {
           commandOpts.timeout = opts.timeout as number;
-        if (opts.maxCost !== undefined)
+        }
+        if (opts.maxCost !== undefined) {
           commandOpts.maxCost = opts.maxCost as number;
+        }
         await runBenchRunCommand(commandOpts);
       } catch (err) {
         process.stderr.write(
-          `${err instanceof Error ? err.message : String(err)}\n`,
+          `${err instanceof Error ? err.message : String(err)}\n`
         );
         process.exitCode = 1;
       }
@@ -583,39 +606,42 @@ export function registerBenchCommand(program: Command): void {
   bench
     .command("report <resultsPath>")
     .description(
-      "Renders an A/B comparison from a saved results.jsonl (text table; HTML with -o).",
+      "Renders an A/B comparison from a saved results.jsonl (text table; HTML with -o)."
     )
     .option(
       "--config-a <name>",
-      'config name to use as "a" (default: first seen in the file)',
+      'config name to use as "a" (default: first seen in the file)'
     )
     .option(
       "--config-b <name>",
-      'config name to use as "b" (default: second seen in the file)',
+      'config name to use as "b" (default: second seen in the file)'
     )
     .option(
       "-o, --output <path>",
-      "also write a self-contained HTML report to this path",
+      "also write a self-contained HTML report to this path"
     )
     .option(
       "--json",
-      "emit the full computed structure as JSON instead of a text table",
+      "emit the full computed structure as JSON instead of a text table"
     )
     .action(async (resultsPath: string, opts) => {
       try {
         const commandOpts: BenchReportCommandOptions = {
           json: Boolean(opts.json),
         };
-        if (opts.configA !== undefined)
+        if (opts.configA !== undefined) {
           commandOpts.configA = opts.configA as string;
-        if (opts.configB !== undefined)
+        }
+        if (opts.configB !== undefined) {
           commandOpts.configB = opts.configB as string;
-        if (opts.output !== undefined)
+        }
+        if (opts.output !== undefined) {
           commandOpts.output = opts.output as string;
+        }
         await runBenchReportCommand(resultsPath, commandOpts);
       } catch (err) {
         process.stderr.write(
-          `${err instanceof Error ? err.message : String(err)}\n`,
+          `${err instanceof Error ? err.message : String(err)}\n`
         );
         process.exitCode = 1;
       }
@@ -624,23 +650,26 @@ export function registerBenchCommand(program: Command): void {
   bench
     .command("clean")
     .description(
-      "Sweeps orphaned trial workspaces left behind by a crashed bench run.",
+      "Sweeps orphaned trial workspaces left behind by a crashed bench run."
     )
     .option("--repo <dir>", "target repo root — default: current directory")
     .option(
       "--scratch-root <dir>",
-      "scratch root to sweep — default: ~/.cache/peek/bench-scratch",
+      "scratch root to sweep — default: ~/.cache/peek/bench-scratch"
     )
     .action(async (opts) => {
       try {
         const commandOpts: BenchCleanCommandOptions = {};
-        if (opts.repo !== undefined) commandOpts.repo = opts.repo as string;
-        if (opts.scratchRoot !== undefined)
+        if (opts.repo !== undefined) {
+          commandOpts.repo = opts.repo as string;
+        }
+        if (opts.scratchRoot !== undefined) {
           commandOpts.scratchRoot = opts.scratchRoot as string;
+        }
         await runBenchCleanCommand(commandOpts);
       } catch (err) {
         process.stderr.write(
-          `${err instanceof Error ? err.message : String(err)}\n`,
+          `${err instanceof Error ? err.message : String(err)}\n`
         );
         process.exitCode = 1;
       }

@@ -70,53 +70,53 @@ const COMPOSITION_CATEGORY_ORDER: readonly CompositionCategory[] = [
 
 export interface ContextCategoryRow {
   category: CompositionCategory;
+  pct: number; // share of contextTotal, 0..1 (not clamped)
   tokens: number; // char/4 estimate
   tokensLabel: string; // "~"-prefixed — the honesty convention
-  pct: number; // share of contextTotal, 0..1 (not clamped)
 }
 
 export interface ContextResidualRow {
+  label: string; // RESIDUAL_LABEL, verbatim
+  pct: number;
   tokens: number;
   tokensLabel: string; // unprefixed: exact total minus Σ estimates, not itself a char/4 read
-  pct: number;
-  label: string; // RESIDUAL_LABEL, verbatim
 }
 
 export interface ContextTurnRow {
-  turnNumber: number; // 1-indexed, for display and the --turn flag
-  turnIndex: number; // 0-indexed position in session.turns (internal)
-  role: TurnRole;
-  model: string;
-  contextTotal: number; // exact, from usage fields — never char/4
   categories: ContextCategoryRow[]; // only non-zero categories, declaration order
+  contextTotal: number; // exact, from usage fields — never char/4
+  model: string;
   residual: ContextResidualRow;
+  role: TurnRole;
   truncatedLabel?: string;
+  turnIndex: number; // 0-indexed position in session.turns (internal)
+  turnNumber: number; // 1-indexed, for display and the --turn flag
 }
 
 export interface ContextCompactionSeparatorRow {
   beforeTurnNumber: number; // separator prints immediately before this turn
-  shrinkExact: number | null;
   label: string;
+  shrinkExact: number | null;
 }
 
 export interface ContextSpanRow {
   category: CompositionCategory;
-  toolName?: string;
   mcpServer?: string;
   tokensEst: number;
   tokensLabel: string; // always "~"-prefixed — spans are always char/4 estimates
+  toolName?: string;
   truncated: boolean;
   turnRole: TurnRole;
 }
 
 export interface ContextReport {
+  cwd: string;
   harness: HarnessId;
   harnessVersion: string;
-  sessionId: string;
-  cwd: string;
   model: string;
-  turns: ContextTurnRow[];
   separators: ContextCompactionSeparatorRow[];
+  sessionId: string;
+  turns: ContextTurnRow[];
 }
 
 function estTokensLabel(tokens: number): string {
@@ -125,17 +125,19 @@ function estTokensLabel(tokens: number): string {
 
 function buildCategoryRows(
   composition: Composition,
-  contextTotal: number,
+  contextTotal: number
 ): ContextCategoryRow[] {
   const rows: ContextCategoryRow[] = [];
   for (const category of COMPOSITION_CATEGORY_ORDER) {
     const tokens = composition.categories[category];
-    if (!tokens) continue;
+    if (!tokens) {
+      continue;
+    }
     rows.push({
       category,
+      pct: contextTotal === 0 ? 0 : tokens / contextTotal,
       tokens,
       tokensLabel: estTokensLabel(tokens),
-      pct: contextTotal !== 0 ? tokens / contextTotal : 0,
     });
   }
   return rows;
@@ -143,24 +145,26 @@ function buildCategoryRows(
 
 function buildResidualRow(composition: Composition): ContextResidualRow {
   return {
+    label: RESIDUAL_LABEL,
+    pct: composition.residualShare,
     tokens: composition.residual,
     tokensLabel: formatNumber(composition.residual),
-    pct: composition.residualShare,
-    label: RESIDUAL_LABEL,
   };
 }
 
 function buildTurnRow(turn: Turn, index: number): ContextTurnRow {
   const row: ContextTurnRow = {
-    turnNumber: index + 1,
-    turnIndex: index,
-    role: turn.role,
-    model: turn.model,
-    contextTotal: turn.contextTotal,
     categories: buildCategoryRows(turn.composition, turn.contextTotal),
+    contextTotal: turn.contextTotal,
+    model: turn.model,
     residual: buildResidualRow(turn.composition),
+    role: turn.role,
+    turnIndex: index,
+    turnNumber: index + 1,
   };
-  if (turn.composition.truncated) row.truncatedLabel = TRUNCATED_LABEL;
+  if (turn.composition.truncated) {
+    row.truncatedLabel = TRUNCATED_LABEL;
+  }
   return row;
 }
 
@@ -171,7 +175,7 @@ function compactionLabel(shrinkExact: number | null): string {
 }
 
 function isCompactionEvent(
-  event: Session["events"][number],
+  event: Session["events"][number]
 ): event is CompactionEvent {
   return event.kind === "compaction";
 }
@@ -188,19 +192,19 @@ export function buildContextReport(session: Session): ContextReport {
     .filter(isCompactionEvent)
     .map((event) => ({
       beforeTurnNumber: event.turnIndex + 1,
-      shrinkExact: event.shrinkExact,
       label: compactionLabel(event.shrinkExact),
+      shrinkExact: event.shrinkExact,
     }))
     .sort((a, b) => a.beforeTurnNumber - b.beforeTurnNumber);
 
   return {
+    cwd: session.cwd,
     harness: session.harness,
     harnessVersion: session.harnessVersion,
-    sessionId: session.id,
-    cwd: session.cwd,
     model: session.configSnapshot.model,
-    turns,
     separators,
+    sessionId: session.id,
+    turns,
   };
 }
 
@@ -213,10 +217,12 @@ export function buildContextReport(session: Session): ContextReport {
  */
 export function buildTurnDetail(
   session: Session,
-  turnNumber: number,
+  turnNumber: number
 ): ContextSpanRow[] | undefined {
   const turn = session.turns[turnNumber - 1];
-  if (!turn) return undefined;
+  if (!turn) {
+    return;
+  }
   return turn.contentSpans.map((span) => {
     const tokensEst = Math.ceil(span.charCount / 4);
     const row: ContextSpanRow = {
@@ -226,8 +232,12 @@ export function buildTurnDetail(
       truncated: span.truncated,
       turnRole: span.turnRole,
     };
-    if (span.toolName !== undefined) row.toolName = span.toolName;
-    if (span.mcpServer !== undefined) row.mcpServer = span.mcpServer;
+    if (span.toolName !== undefined) {
+      row.toolName = span.toolName;
+    }
+    if (span.mcpServer !== undefined) {
+      row.mcpServer = span.mcpServer;
+    }
     return row;
   });
 }
@@ -246,8 +256,8 @@ export function buildTurnDetail(
 // ---------------------------------------------------------------------------
 
 export interface ResolveOptions {
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
   /** Discovery root overrides, keyed like adapters/*'s own `roots?: string[]`
    * param. Test-only escape hatch — production callers omit this and get
    * each adapter's real default root. */
@@ -264,14 +274,14 @@ export interface ResolveOptions {
  *   - anything else -> a session id, matched across the filtered discovered set.
  * Throws (never returns undefined) — CLI callers catch and print the message.
  */
-export async function resolveSession(
+export function resolveSession(
   input: string | undefined,
-  opts: ResolveOptions = {},
+  opts: ResolveOptions = {}
 ): Promise<SessionRef> {
   return resolveSessionRef(input, opts);
 }
 
-async function parseSessionByHarness(ref: SessionRef): Promise<ParseResult> {
+function parseSessionByHarness(ref: SessionRef): Promise<ParseResult> {
   switch (ref.harness) {
     case "claude-code":
       return parseClaudeSession(ref);
@@ -289,7 +299,7 @@ async function parseSessionByHarness(ref: SessionRef): Promise<ParseResult> {
 /** parse -> dedupSession -> computeComposition -> finalizeCompactions, per
  * T3.2's pipeline brief. */
 export async function loadProcessedSession(
-  ref: SessionRef,
+  ref: SessionRef
 ): Promise<{ session: Session; warnings: ParseWarning[] }> {
   const { session, warnings } = await parseSessionByHarness(ref);
   const deduped: Session = dedupSession(session);
@@ -306,7 +316,7 @@ export async function loadProcessedSession(
 function printTurnRow(
   turn: ContextTurnRow,
   separators: Map<number, ContextCompactionSeparatorRow[]>,
-  out: string[],
+  out: string[]
 ): void {
   for (const sep of separators.get(turn.turnNumber) ?? []) {
     out.push(renderSeparator(sep.label));
@@ -314,9 +324,11 @@ function printTurnRow(
   }
 
   out.push(
-    `${pc.bold(`Turn ${turn.turnNumber}`)}  ${turn.role.padEnd(9)}  ${turn.model}  contextTotal ${formatNumber(turn.contextTotal)}`,
+    `${pc.bold(`Turn ${turn.turnNumber}`)}  ${turn.role.padEnd(9)}  ${turn.model}  contextTotal ${formatNumber(turn.contextTotal)}`
   );
-  if (turn.truncatedLabel) out.push(`  ${pc.yellow(turn.truncatedLabel)}`);
+  if (turn.truncatedLabel) {
+    out.push(`  ${pc.yellow(turn.truncatedLabel)}`);
+  }
 
   const rows: string[][] = turn.categories.map((c) => [
     c.category,
@@ -331,11 +343,11 @@ function printTurnRow(
 
   const table = renderTable(
     [
-      { header: "category", align: "left" },
-      { header: "tokens", align: "right" },
-      { header: "share", align: "left" },
+      { align: "left", header: "category" },
+      { align: "right", header: "tokens" },
+      { align: "left", header: "share" },
     ],
-    rows,
+    rows
   );
   out.push(...table.split("\n").map((line) => `  ${line}`));
   out.push("");
@@ -345,15 +357,18 @@ function printReport(report: ContextReport): void {
   const out: string[] = [];
   out.push(
     pc.bold("peek context") +
-      pc.dim(` — ${report.harness} · ${report.sessionId} · ${report.cwd}`),
+      pc.dim(` — ${report.harness} · ${report.sessionId} · ${report.cwd}`)
   );
   out.push("");
 
   const separators = new Map<number, ContextCompactionSeparatorRow[]>();
   for (const sep of report.separators) {
     const bucket = separators.get(sep.beforeTurnNumber);
-    if (bucket) bucket.push(sep);
-    else separators.set(sep.beforeTurnNumber, [sep]);
+    if (bucket) {
+      bucket.push(sep);
+    } else {
+      separators.set(sep.beforeTurnNumber, [sep]);
+    }
   }
 
   for (const turn of report.turns) {
@@ -380,13 +395,13 @@ function printTurnDetail(turnNumber: number, spans: ContextSpanRow[]): void {
     out.push(
       renderTable(
         [
-          { header: "category", align: "left" },
-          { header: "tool / mcp", align: "left" },
-          { header: "tokens", align: "right" },
-          { header: "flags", align: "left" },
+          { align: "left", header: "category" },
+          { align: "left", header: "tool / mcp" },
+          { align: "right", header: "tokens" },
+          { align: "left", header: "flags" },
         ],
-        rows,
-      ),
+        rows
+      )
     );
   }
   process.stdout.write(`${out.join("\n")}\n`);
@@ -397,19 +412,23 @@ function printTurnDetail(turnNumber: number, spans: ContextSpanRow[]): void {
 // ---------------------------------------------------------------------------
 
 export interface ContextCommandOptions {
-  harness?: HarnessId;
   cwd?: string;
+  harness?: HarnessId;
   json?: boolean;
   turn?: number;
 }
 
 export async function runContextCommand(
   sessionIdOrPath: string | undefined,
-  options: ContextCommandOptions,
+  options: ContextCommandOptions
 ): Promise<void> {
   const resolveOpts: ResolveOptions = {};
-  if (options.harness !== undefined) resolveOpts.harness = options.harness;
-  if (options.cwd !== undefined) resolveOpts.cwd = options.cwd;
+  if (options.harness !== undefined) {
+    resolveOpts.harness = options.harness;
+  }
+  if (options.cwd !== undefined) {
+    resolveOpts.cwd = options.cwd;
+  }
   const ref = await resolveSession(sessionIdOrPath, resolveOpts);
   const { session } = await loadProcessedSession(ref);
 
@@ -417,12 +436,12 @@ export async function runContextCommand(
     const spans = buildTurnDetail(session, options.turn);
     if (!spans) {
       throw new Error(
-        `no turn ${options.turn} in this session (it has ${session.turns.length} turn${session.turns.length === 1 ? "" : "s"})`,
+        `no turn ${options.turn} in this session (it has ${session.turns.length} turn${session.turns.length === 1 ? "" : "s"})`
       );
     }
     if (options.json) {
       process.stdout.write(
-        `${serializeJSON({ turnNumber: options.turn, spans })}\n`,
+        `${serializeJSON({ spans, turnNumber: options.turn })}\n`
       );
       return;
     }

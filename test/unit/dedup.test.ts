@@ -1,5 +1,5 @@
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import {
@@ -15,22 +15,23 @@ import type {
   Turn,
 } from "../../src/model/types.js";
 
-const FIXTURES_ROOT = path.join(__dirname, "../fixtures/claude-code");
+const FIXTURES_ROOT = path.join(import.meta.dirname, "../fixtures/claude-code");
 
-async function refs(): Promise<SessionRef[]> {
+function refs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([FIXTURES_ROOT]);
 }
 
 function findRef(
   all: SessionRef[],
   versionDir: string,
-  id: string,
+  id: string
 ): SessionRef {
   const ref = all.find(
-    (r) =>
-      r.id === id && r.path.includes(`${path.sep}${versionDir}${path.sep}`),
+    (r) => r.id === id && r.path.includes(`${path.sep}${versionDir}${path.sep}`)
   );
-  if (!ref) throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${versionDir}/${id}`);
+  }
   return ref;
 }
 
@@ -38,13 +39,13 @@ function findRef(
 // passthrough/ordering behavior directly without going through a parser. ---
 
 function usage(
-  partial: Partial<NormalizedUsage> & { raw: unknown },
+  partial: Partial<NormalizedUsage> & { raw: unknown }
 ): NormalizedUsage {
   return {
-    inputUncached: 0,
     cacheRead: 0,
-    cacheWrite5m: 0,
     cacheWrite1h: 0,
+    cacheWrite5m: 0,
+    inputUncached: 0,
     output: 0,
     ...partial,
   };
@@ -60,40 +61,40 @@ function makeTurn(opts: {
 }): Turn {
   const u = usage({ ...opts.usage, raw: opts.raw });
   return {
-    role: opts.role ?? "assistant",
-    model: opts.model ?? "claude-sonnet-5",
-    timestamp: opts.timestamp ?? new Date(0),
-    contentSpans: opts.spans ?? [],
-    usage: u,
-    contextTotal:
-      u.inputUncached + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h,
     composition: {
       categories: {
-        userText: 0,
         assistantText: 0,
-        thinking: 0,
-        toolResults: 0,
-        toolCallArgs: 0,
-        instructionInjection: 0,
-        systemPrompt: 0,
-        toolSchemas: 0,
         compactionSummaries: 0,
         coordination: 0,
+        instructionInjection: 0,
+        systemPrompt: 0,
+        thinking: 0,
+        toolCallArgs: 0,
+        toolResults: 0,
+        toolSchemas: 0,
+        userText: 0,
       },
       residual: 0,
       residualShare: 0,
       truncated: false,
     },
+    contentSpans: opts.spans ?? [],
+    contextTotal:
+      u.inputUncached + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h,
     cost: {
-      input: 0,
-      output: 0,
       cacheRead: 0,
-      cacheWrite5m: 0,
       cacheWrite1h: 0,
-      total: 0,
+      cacheWrite5m: 0,
+      input: 0,
       mode: "auto",
+      output: 0,
       priced: false,
+      total: 0,
     },
+    model: opts.model ?? "claude-sonnet-5",
+    role: opts.role ?? "assistant",
+    timestamp: opts.timestamp ?? new Date(0),
+    usage: u,
   };
 }
 
@@ -120,7 +121,7 @@ describe("dedupTurns — streaming-split fixture (real parse)", () => {
     const merged = deduped.find(
       (t) =>
         (t.usage.raw as { message: { id: string } }).message.id ===
-        "msg-stream-0001",
+        "msg-stream-0001"
     );
     expect(merged).toBeDefined();
 
@@ -134,16 +135,16 @@ describe("dedupTurns — streaming-split fixture (real parse)", () => {
     const originalFragments = session.turns.filter(
       (t) =>
         (t.usage.raw as { message: { id: string } }).message.id ===
-        "msg-stream-0001",
+        "msg-stream-0001"
     );
     expect(originalFragments).toHaveLength(3);
     expect(merged?.contentSpans).toEqual(
-      originalFragments.flatMap((t) => t.contentSpans),
+      originalFragments.flatMap((t) => t.contentSpans)
     );
 
     const other = deduped.find(
       (t) =>
-        (t.usage.raw as { message: { id: string } }).message.id === "msg-0002",
+        (t.usage.raw as { message: { id: string } }).message.id === "msg-0002"
     );
     expect(other).toBeDefined();
   });
@@ -159,17 +160,17 @@ describe("dedupTurns — sidechain-replay fixture (real parse, #913)", () => {
     const deduped = dedupTurns(session.turns);
     expect(deduped).toHaveLength(1);
 
-    const survivor = deduped[0];
-    expect(survivor).toBeDefined();
-    expect((survivor?.usage.raw as { isSidechain: boolean }).isSidechain).toBe(
-      false,
+    const survivor = deduped.at(0);
+    assert(survivor);
+    expect((survivor.usage.raw as { isSidechain: boolean }).isSidechain).toBe(
+      false
     );
-    expect((survivor?.usage.raw as { requestId: string }).requestId).toBe(
-      "req-orig-0001",
+    expect((survivor.usage.raw as { requestId: string }).requestId).toBe(
+      "req-orig-0001"
     );
 
     // the #913 regression: cache_read counted once, not doubled by the replay
-    expect(survivor?.usage.cacheRead).toBe(1800);
+    expect(survivor.usage.cacheRead).toBe(1800);
     expect(survivor?.contextTotal).toBe(2000 + 1800);
   });
 });
@@ -192,21 +193,21 @@ describe("dedupTurns — idempotence", () => {
 
   it("holds on synthetic turns via the exported helpers too", () => {
     const a = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r1", isSidechain: false },
-      usage: { inputUncached: 10, output: 2 },
+      raw: { isSidechain: false, message: { id: "m1" }, requestId: "r1" },
       spans: [assistantSpan("a")],
+      usage: { inputUncached: 10, output: 2 },
     });
     const b = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r1", isSidechain: false },
-      usage: { inputUncached: 10, output: 2 },
+      raw: { isSidechain: false, message: { id: "m1" }, requestId: "r1" },
       spans: [assistantSpan("b")],
+      usage: { inputUncached: 10, output: 2 },
     });
     const replay = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r2", isSidechain: true },
+      raw: { isSidechain: true, message: { id: "m1" }, requestId: "r2" },
       usage: { inputUncached: 10, output: 2 },
     });
     const unrelated = makeTurn({
-      raw: { message: { id: "m2" }, requestId: "r3", isSidechain: false },
+      raw: { isSidechain: false, message: { id: "m2" }, requestId: "r3" },
       usage: { inputUncached: 5, output: 1 },
     });
 
@@ -221,11 +222,11 @@ describe("dedupTurns — keys-absent passthrough (pi-shaped turns)", () => {
     // pi entries don't carry message.id/requestId at all — the pi adapter's
     // usage.raw is shaped like a plain pi log entry.
     const piTurn = makeTurn({
-      raw: { entryType: "message", role: "assistant", cacheWrite: 100 },
+      raw: { cacheWrite: 100, entryType: "message", role: "assistant" },
       usage: { inputUncached: 42, output: 7 },
     });
     const anotherPiTurn = makeTurn({
-      raw: { entryType: "message", role: "assistant", cacheWrite: 50 },
+      raw: { cacheWrite: 50, entryType: "message", role: "assistant" },
       usage: { inputUncached: 5, output: 1 },
     });
 
@@ -236,10 +237,10 @@ describe("dedupTurns — keys-absent passthrough (pi-shaped turns)", () => {
 
   it("extractDedupKey returns undefined when either field is missing", () => {
     expect(
-      extractDedupKey(makeTurn({ raw: { message: { id: "m1" } } })), // no requestId
+      extractDedupKey(makeTurn({ raw: { message: { id: "m1" } } })) // no requestId
     ).toBeUndefined();
     expect(
-      extractDedupKey(makeTurn({ raw: { requestId: "r1" } })), // no message.id
+      extractDedupKey(makeTurn({ raw: { requestId: "r1" } })) // no message.id
     ).toBeUndefined();
     expect(extractDedupKey(makeTurn({ raw: undefined }))).toBeUndefined();
   });
@@ -273,10 +274,12 @@ describe("dedupTurns — ordering stability", () => {
     const result = dedupTurns([p1, s1, p2, s2, p3]);
     // p1, merged(s1,s2) at s1's position, p2, p3
     expect(result).toHaveLength(4);
+    const merged = result.at(1);
+    assert(merged);
     expect(result[0]).toBe(p1);
-    expect(
-      (result[1]?.usage.raw as { message: { id: string } }).message.id,
-    ).toBe("m1");
+    expect((merged.usage.raw as { message: { id: string } }).message.id).toBe(
+      "m1"
+    );
     expect(result[1]?.contentSpans).toHaveLength(0);
     expect(result[2]).toBe(p2);
     expect(result[3]).toBe(p3);
@@ -285,11 +288,11 @@ describe("dedupTurns — ordering stability", () => {
   it("keeps the sidechain family anchored at its earliest record even when the winner is the second record", () => {
     const before = makeTurn({ raw: { tag: "before" } });
     const sidechainFirst = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r1", isSidechain: true },
+      raw: { isSidechain: true, message: { id: "m1" }, requestId: "r1" },
       usage: { inputUncached: 1, output: 1 },
     });
     const nonSidechainSecond = makeTurn({
-      raw: { message: { id: "m1" }, requestId: "r2", isSidechain: false },
+      raw: { isSidechain: false, message: { id: "m1" }, requestId: "r2" },
       usage: { inputUncached: 99, output: 99 },
     });
     const after = makeTurn({ raw: { tag: "after" } });
@@ -301,11 +304,13 @@ describe("dedupTurns — ordering stability", () => {
       after,
     ]);
     expect(result).toHaveLength(3);
+    const winner = result.at(1);
+    assert(winner);
     expect(result[0]).toBe(before);
-    expect((result[1]?.usage.raw as { isSidechain: boolean }).isSidechain).toBe(
-      false,
+    expect((winner.usage.raw as { isSidechain: boolean }).isSidechain).toBe(
+      false
     );
-    expect(result[1]?.usage.inputUncached).toBe(99);
+    expect(winner.usage.inputUncached).toBe(99);
     expect(result[2]).toBe(after);
   });
 });
@@ -366,10 +371,10 @@ describe("pickSidechainWinner — direct helper tests", () => {
     });
 
     expect(pickSidechainWinner([sidechainBigger, nonSidechainSmaller])).toBe(
-      nonSidechainSmaller,
+      nonSidechainSmaller
     );
     expect(pickSidechainWinner([nonSidechainSmaller, sidechainBigger])).toBe(
-      nonSidechainSmaller,
+      nonSidechainSmaller
     );
   });
 
@@ -389,7 +394,7 @@ describe("pickSidechainWinner — direct helper tests", () => {
   it("treats a missing isSidechain field as non-sidechain", () => {
     const noFlag = makeTurn({ raw: { requestId: "r1" } });
     const explicitSidechain = makeTurn({
-      raw: { requestId: "r2", isSidechain: true },
+      raw: { isSidechain: true, requestId: "r2" },
       usage: { inputUncached: 1000, output: 1000 },
     });
 

@@ -15,7 +15,7 @@ import type { HarnessId } from "./model/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(
-  readFileSync(path.join(__dirname, "..", "package.json"), "utf8"),
+  readFileSync(path.join(__dirname, "..", "package.json"), "utf8")
 ) as { version: string };
 
 const HARNESS_IDS: readonly HarnessId[] = ["claude-code", "codex", "pi"];
@@ -25,7 +25,7 @@ function parseHarness(value: string): HarnessId {
     return value as HarnessId;
   }
   throw new Error(
-    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`,
+    `--harness must be one of ${HARNESS_IDS.join(", ")} (got: ${value})`
   );
 }
 
@@ -42,7 +42,7 @@ const program = new Command();
 program
   .name("peek")
   .description(
-    "Cross-harness context and cost inspector for AI coding agent sessions.",
+    "Cross-harness context and cost inspector for AI coding agent sessions."
   )
   .version(pkg.version);
 
@@ -50,22 +50,22 @@ program
   .command("context [sessionIdOrPath]")
   .description(
     "Historical per-turn context composition for a session (residual honestly labeled). " +
-      "With no argument, resolves to the most recently modified session.",
+      "With no argument, resolves to the most recently modified session."
   )
   .option(
     "--harness <harness>",
     "restrict to one harness: claude-code | codex | pi",
-    parseHarness,
+    parseHarness
   )
   .option(
     "--cwd <path>",
-    "restrict to sessions discovered from this working directory",
+    "restrict to sessions discovered from this working directory"
   )
   .option("--json", "emit the full computed structure as JSON")
   .option(
     "--turn <n>",
     "show one turn's span-level breakdown (1-indexed)",
-    parseTurn,
+    parseTurn
   )
   .action(async (sessionIdOrPath: string | undefined, opts) => {
     try {
@@ -75,12 +75,16 @@ program
       if (opts.harness !== undefined) {
         commandOpts.harness = opts.harness as HarnessId;
       }
-      if (opts.cwd !== undefined) commandOpts.cwd = opts.cwd as string;
-      if (opts.turn !== undefined) commandOpts.turn = opts.turn as number;
+      if (opts.cwd !== undefined) {
+        commandOpts.cwd = opts.cwd as string;
+      }
+      if (opts.turn !== undefined) {
+        commandOpts.turn = opts.turn as number;
+      }
       await runContextCommand(sessionIdOrPath, commandOpts);
     } catch (err) {
       process.stderr.write(
-        `${err instanceof Error ? err.message : String(err)}\n`,
+        `${err instanceof Error ? err.message : String(err)}\n`
       );
       process.exitCode = 1;
     }

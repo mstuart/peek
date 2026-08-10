@@ -11,8 +11,8 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 export interface AppliedConfig {
-  model?: string;
   appliedFiles: string[];
+  model?: string;
 }
 
 const SETTINGS_REL_PATH = join(".claude", "settings.json");
@@ -35,6 +35,7 @@ function validateSettingsJson(text: string, path: string): void {
   } catch (err) {
     throw new Error(
       `invalid JSON in ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err }
     );
   }
 }
@@ -48,7 +49,7 @@ function validateSettingsJson(text: string, path: string): void {
  */
 export async function applyConfig(
   variantDir: string | "current",
-  workspaceDir: string,
+  workspaceDir: string
 ): Promise<AppliedConfig> {
   if (variantDir === "current") {
     return { appliedFiles: [] };
@@ -58,7 +59,10 @@ export async function applyConfig(
 
   for (const rel of OVERLAY_FILES) {
     const src = join(variantDir, rel);
-    if (!(await fileExists(src))) continue;
+    // biome-ignore lint/performance/noAwaitInLoops: Overlay precedence requires ordered application.
+    if (!(await fileExists(src))) {
+      continue;
+    }
 
     const contents = await readFile(src, "utf8");
     if (rel === SETTINGS_REL_PATH) {
@@ -88,7 +92,7 @@ export async function applyConfig(
   }
 
   return {
-    ...(model !== undefined ? { model } : {}),
+    ...(model === undefined ? {} : { model }),
     appliedFiles,
   };
 }

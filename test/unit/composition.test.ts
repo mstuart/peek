@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 import { discoverClaudeSessions } from "../../src/adapters/claude/discover.js";
 import { parseClaudeSession } from "../../src/adapters/claude/parse.js";
 import { discoverCodexSessions } from "../../src/adapters/codex/discover.js";
@@ -27,19 +27,21 @@ const CLAUDE_FIXTURES_ROOT = join(__dirname, "../fixtures/claude-code");
 const PI_FIXTURES_ROOT = join(__dirname, "../fixtures/pi");
 const CODEX_FIXTURES_ROOT = join(__dirname, "../fixtures/codex");
 
-async function claudeRefs(): Promise<SessionRef[]> {
+function claudeRefs(): Promise<SessionRef[]> {
   return discoverClaudeSessions([CLAUDE_FIXTURES_ROOT]);
 }
 
 function findRef(all: SessionRef[], id: string): SessionRef {
   const ref = all.find((r) => r.id === id);
-  if (!ref) throw new Error(`fixture ref not found: ${id}`);
+  if (!ref) {
+    throw new Error(`fixture ref not found: ${id}`);
+  }
   return ref;
 }
 
 /** Σ categories + residual = contextTotal, per model/types.ts's frozen invariant. */
 function sumCategories(
-  categories: Record<CompositionCategory, number>,
+  categories: Record<CompositionCategory, number>
 ): number {
   return Object.values(categories).reduce((a, b) => a + b, 0);
 }
@@ -74,17 +76,17 @@ describe("computeComposition — streaming-split fixture (audit R3-F1 gate)", ()
 
     const deduped = dedupTurns(session.turns);
     const composed = computeComposition({ ...session, turns: deduped });
-    const first = composed.turns[0];
-    expect(first).toBeDefined();
+    const first = composed.turns.at(0);
+    assert(first);
 
     // userText 40 (user span), thinking 48 (excluded), assistantText 24,
     // toolCallArgs 20 — from the merged fragments' spans, each counted once.
-    expect(first?.composition.categories.userText).toBe(10); // ceil(40/4)
-    expect(first?.composition.categories.thinking).toBe(0);
-    expect(first?.composition.categories.assistantText).toBe(6); // ceil(24/4)
-    expect(first?.composition.categories.toolCallArgs).toBe(5); // ceil(20/4)
+    expect(first.composition.categories.userText).toBe(10); // ceil(40/4)
+    expect(first.composition.categories.thinking).toBe(0);
+    expect(first.composition.categories.assistantText).toBe(6); // ceil(24/4)
+    expect(first.composition.categories.toolCallArgs).toBe(5); // ceil(20/4)
     expect(first?.contextTotal).toBe(1500);
-    expect(first?.composition.residual).toBe(1500 - (10 + 6 + 5));
+    expect(first.composition.residual).toBe(1500 - (10 + 6 + 5));
   });
 });
 
@@ -94,7 +96,7 @@ describe("computeComposition — thinking exclusion (audit R2-C2 gate)", () => {
     const { session } = await parseClaudeSession(ref);
 
     const hasThinkingSpan = session.turns.some((t) =>
-      t.contentSpans.some((s) => s.category === "thinking"),
+      t.contentSpans.some((s) => s.category === "thinking")
     );
     expect(hasThinkingSpan).toBe(true); // the gate: real thinking content is present pre-composition
 
@@ -112,27 +114,30 @@ describe("computeComposition — compaction fixture (RESET at CompactionEvent bo
     expect(session.turns).toHaveLength(3);
 
     const compactionEvents = session.events.filter(
-      (e) => e.kind === "compaction",
+      (e) => e.kind === "compaction"
     );
     expect(compactionEvents).toHaveLength(1);
-    const event = compactionEvents[0];
-    if (event?.kind !== "compaction") throw new Error("unreachable");
+    const event = compactionEvents.at(0);
+    if (event?.kind !== "compaction") {
+      throw new Error("unreachable");
+    }
     expect(event.turnIndex).toBe(2);
 
     const [pre, apiError, post] = session.turns;
+    assert(pre);
+    assert(apiError);
+    assert(post);
 
     // pre-compaction: userText 40 + assistantText 68, over contextTotal 20000.
-    expect(pre?.contextTotal).toBe(20000);
-    expect(pre?.composition.categories.userText).toBe(10);
-    expect(pre?.composition.categories.assistantText).toBe(17);
+    expect(pre?.contextTotal).toBe(20_000);
+    expect(pre.composition.categories.userText).toBe(10);
+    expect(pre.composition.categories.assistantText).toBe(17);
 
     // zero-contextTotal (api-error) turn: composition forced all-zero (rule 6),
     // even though it carries its own (empty) assistantText span.
     expect(apiError?.contextTotal).toBe(0);
-    expect(apiError?.composition.residual).toBe(0);
-    expect(
-      sumCategories(apiError?.composition.categories ?? ({} as never)),
-    ).toBe(0);
+    expect(apiError.composition.residual).toBe(0);
+    expect(sumCategories(apiError.composition.categories)).toBe(0);
 
     // post-compaction (turnIndex 2, the reset boundary): categories.userText
     // and .toolCallArgs are back to 0 — NOT inherited from the pre-compaction
@@ -140,14 +145,14 @@ describe("computeComposition — compaction fixture (RESET at CompactionEvent bo
     // on this very turn) and this turn's own assistantText (60 chars) seed
     // the new phase.
     expect(post?.contextTotal).toBe(3000);
-    expect(post?.composition.categories.userText).toBe(0);
-    expect(post?.composition.categories.toolCallArgs).toBe(0);
-    expect(post?.composition.categories.compactionSummaries).toBe(40); // ceil(157/4)
-    expect(post?.composition.categories.assistantText).toBe(15); // ceil(60/4)
-    expect(post?.composition.residual).toBe(3000 - (40 + 15));
+    expect(post.composition.categories.userText).toBe(0);
+    expect(post.composition.categories.toolCallArgs).toBe(0);
+    expect(post.composition.categories.compactionSummaries).toBe(40); // ceil(157/4)
+    expect(post.composition.categories.assistantText).toBe(15); // ceil(60/4)
+    expect(post.composition.residual).toBe(3000 - (40 + 15));
     // large residual is honest: this harness doesn't log the system prompt,
     // tool schemas, or framing that make up the rest of contextTotal.
-    expect(post?.composition.residualShare).toBeGreaterThan(0.9);
+    expect(post.composition.residualShare).toBeGreaterThan(0.9);
 
     assertInvariant(session);
   });
@@ -159,6 +164,7 @@ describe("computeComposition — property: invariant holds across every claude f
     expect(all.length).toBeGreaterThan(0);
 
     for (const ref of all) {
+      // biome-ignore lint/performance/noAwaitInLoops: Fixture parsing is intentionally serialized for deterministic coverage.
       const { session } = await parseClaudeSession(ref);
       const deduped = dedupTurns(session.turns);
       const composed = computeComposition({ ...session, turns: deduped });
@@ -172,21 +178,23 @@ describe("computeComposition — accumulation ordering", () => {
     const session = await composedClaudeSession("normal-turns");
     expect(session.turns).toHaveLength(2);
     const [first, second] = session.turns;
+    assert(first);
+    assert(second);
 
     // turn 1: "Please fix the login bug in auth.ts" (35 chars) is the ONLY
     // userText contribution in the whole fixture — no later user record adds
     // more userText content.
-    expect(first?.composition.categories.userText).toBe(9); // ceil(35/4)
+    expect(first.composition.categories.userText).toBe(9); // ceil(35/4)
 
     // turn 2 adds no new userText span (it only adds a toolResults span and
     // more assistantText), yet still carries the SAME userText total —
     // proving turn 1's user content accumulated forward rather than
     // resetting or being turn-1-only.
-    expect(second?.composition.categories.userText).toBe(9);
-    expect(second?.composition.categories.assistantText).toBeGreaterThan(
-      first?.composition.categories.assistantText ?? 0,
+    expect(second.composition.categories.userText).toBe(9);
+    expect(second.composition.categories.assistantText).toBeGreaterThan(
+      first.composition.categories.assistantText ?? 0
     );
-    expect(second?.composition.categories.toolResults).toBeGreaterThan(0);
+    expect(second.composition.categories.toolResults).toBeGreaterThan(0);
 
     assertInvariant(session);
   });
@@ -197,13 +205,13 @@ describe("computeComposition — pi fixture through the same pipeline", () => {
     const ref: SessionRef = {
       harness: "pi",
       id: "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+      kind: "main",
+      mtime: new Date(0),
       path: join(
         PI_FIXTURES_ROOT,
-        "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
+        "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl"
       ),
       sizeBytes: 0,
-      mtime: new Date(0),
-      kind: "main",
     };
     const { session } = await parsePiSession(ref);
     expect(session.turns.length).toBeGreaterThan(0);
@@ -221,10 +229,10 @@ describe("computeComposition — pi fixture through the same pipeline", () => {
     const assistantTurn = composed.turns.find((t) => t.role === "assistant");
     expect(assistantTurn?.composition.categories.userText).toBeGreaterThan(0);
     expect(assistantTurn?.composition.categories.assistantText).toBeGreaterThan(
-      0,
+      0
     );
     expect(assistantTurn?.composition.categories.toolCallArgs).toBeGreaterThan(
-      0,
+      0
     );
 
     assertInvariant(composed);
@@ -235,7 +243,9 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
   async function dedupedCodexSession(id: string): Promise<Session> {
     const all = await discoverCodexSessions([CODEX_FIXTURES_ROOT]);
     const ref = all.find((r) => r.id === id);
-    if (!ref) throw new Error(`fixture ref not found: ${id}`);
+    if (!ref) {
+      throw new Error(`fixture ref not found: ${id}`);
+    }
     const { session } = await parseCodexSession(ref);
     return dedupSession(session); // precondition per composition.ts's RESET_AT note
   }
@@ -249,15 +259,17 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
     const resetAt = new Set(
       session.events
         .filter((event) => event.kind === "compaction")
-        .map((event) => event.turnIndex),
+        .map((event) => event.turnIndex)
     );
     let state = initCompositionAccumulator();
     const turns = session.turns.map((turn, index) => {
-      if (resetAt.has(index)) state = initCompositionAccumulator();
+      if (resetAt.has(index)) {
+        state = initCompositionAccumulator();
+      }
       const composition = accumulateTurnComposition(
         state,
         turn,
-        session.harness,
+        session.harness
       );
       return { ...turn, composition };
     });
@@ -272,21 +284,23 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
     const composed = computeComposition(deduped);
     const finalTurn = composed.turns.find((t) => t.contextTotal > 0);
     expect(finalTurn).toBeDefined();
-    if (!finalTurn) throw new Error("unreachable");
+    if (!finalTurn) {
+      throw new Error("unreachable");
+    }
 
     const expectedSystemPrompt = Math.ceil(
-      (deduped.configSnapshot.systemPrompt as string).length / 4,
+      (deduped.configSnapshot.systemPrompt as string).length / 4
     );
     const expectedToolSchemas = Math.ceil(
-      (deduped.configSnapshot.toolSchemas as string).length / 4,
+      (deduped.configSnapshot.toolSchemas as string).length / 4
     );
     expect(finalTurn.composition.categories.systemPrompt).toBeGreaterThan(0);
     expect(finalTurn.composition.categories.toolSchemas).toBeGreaterThan(0);
     expect(finalTurn.composition.categories.systemPrompt).toBe(
-      expectedSystemPrompt,
+      expectedSystemPrompt
     );
     expect(finalTurn.composition.categories.toolSchemas).toBe(
-      expectedToolSchemas,
+      expectedToolSchemas
     );
 
     const sum = sumCategories(finalTurn.composition.categories);
@@ -298,11 +312,13 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
     const unseeded = unseededCompose(deduped);
     const unseededFinal = unseeded.turns.find((t) => t.contextTotal > 0);
     expect(unseededFinal).toBeDefined();
-    if (!unseededFinal) throw new Error("unreachable");
+    if (!unseededFinal) {
+      throw new Error("unreachable");
+    }
     expect(unseededFinal.composition.categories.systemPrompt).toBe(0);
     expect(unseededFinal.composition.categories.toolSchemas).toBe(0);
     expect(
-      unseededFinal.composition.residual - finalTurn.composition.residual,
+      unseededFinal.composition.residual - finalTurn.composition.residual
     ).toBe(expectedSystemPrompt + expectedToolSchemas);
   });
 
@@ -319,13 +335,13 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
     const ref: SessionRef = {
       harness: "pi",
       id: "cb5b132f-2542-40b3-a7c9-49ffc431e30b",
+      kind: "main",
+      mtime: new Date(0),
       path: join(
         PI_FIXTURES_ROOT,
-        "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl",
+        "system-a-v3/--Users-fake-project--/2026-08-01T10-00-00-000Z_cb5b132f-2542-40b3-a7c9-49ffc431e30b.jsonl"
       ),
       sizeBytes: 0,
-      mtime: new Date(0),
-      kind: "main",
     };
     const { session } = await parsePiSession(ref);
     const deduped = dedupTurns(session.turns);
@@ -339,26 +355,26 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
 
   it("compaction persistence: the systemPrompt/toolSchemas seed is re-applied at the reset boundary, not wiped by it", () => {
     const usage = (partial: Partial<NormalizedUsage>): NormalizedUsage => ({
-      inputUncached: 0,
       cacheRead: 0,
-      cacheWrite5m: 0,
       cacheWrite1h: 0,
+      cacheWrite5m: 0,
+      inputUncached: 0,
       output: 0,
       raw: undefined,
       ...partial,
     });
     const zeroComposition = () => ({
       categories: {
-        userText: 0,
         assistantText: 0,
-        thinking: 0,
-        toolResults: 0,
-        toolCallArgs: 0,
-        instructionInjection: 0,
-        systemPrompt: 0,
-        toolSchemas: 0,
         compactionSummaries: 0,
         coordination: 0,
+        instructionInjection: 0,
+        systemPrompt: 0,
+        thinking: 0,
+        toolCallArgs: 0,
+        toolResults: 0,
+        toolSchemas: 0,
+        userText: 0,
       } as Record<CompositionCategory, number>,
       residual: 0,
       residualShare: 0,
@@ -366,75 +382,77 @@ describe("computeComposition — configSnapshot seeding (systemPrompt/toolSchema
     });
     const zeroCost = () =>
       ({
-        input: 0,
-        output: 0,
         cacheRead: 0,
-        cacheWrite5m: 0,
         cacheWrite1h: 0,
-        total: 0,
+        cacheWrite5m: 0,
+        input: 0,
         mode: "auto" as const,
+        output: 0,
         priced: false,
+        total: 0,
       }) as Turn["cost"];
 
     const preTurn: Turn = {
-      role: "assistant",
-      model: "gpt-5.5",
-      timestamp: new Date(0),
-      contentSpans: [],
-      usage: usage({ inputUncached: 1000 }),
-      contextTotal: 1000,
       composition: zeroComposition(),
+      contentSpans: [],
+      contextTotal: 1000,
       cost: zeroCost(),
+      model: "gpt-5.5",
+      role: "assistant",
+      timestamp: new Date(0),
+      usage: usage({ inputUncached: 1000 }),
     };
     const postTurn: Turn = {
-      role: "assistant",
-      model: "gpt-5.5",
-      timestamp: new Date(1),
-      contentSpans: [],
-      usage: usage({ inputUncached: 500 }),
-      contextTotal: 500,
       composition: zeroComposition(),
+      contentSpans: [],
+      contextTotal: 500,
       cost: zeroCost(),
+      model: "gpt-5.5",
+      role: "assistant",
+      timestamp: new Date(1),
+      usage: usage({ inputUncached: 500 }),
     };
     const compactionEvent: CompactionEvent = {
-      kind: "compaction",
       at: new Date(1),
-      turnIndex: 1,
-      tokensBeforeExact: 1000,
-      tokensAfterExact: 500,
-      shrinkExact: 500,
       discardedEst: 500,
+      kind: "compaction",
+      shrinkExact: 500,
       summaryTokensEst: 0,
+      tokensAfterExact: 500,
+      tokensBeforeExact: 1000,
+      turnIndex: 1,
     };
 
     const session: Session = {
+      children: [],
+      configSnapshot: {
+        model: "gpt-5.5",
+        modelChanges: [],
+        systemPrompt: "x".repeat(400), // ceil(400/4) = 100
+        toolSchemas: "y".repeat(80), // ceil(80/4) = 20
+      },
+      cwd: "/tmp",
+      endedAt: new Date(1),
+      events: [compactionEvent as SessionEvent],
       harness: "codex",
       harnessVersion: "0.134.0",
       id: "synthetic-compaction-seed",
-      cwd: "/tmp",
       startedAt: new Date(0),
-      endedAt: new Date(1),
-      configSnapshot: {
-        systemPrompt: "x".repeat(400), // ceil(400/4) = 100
-        toolSchemas: "y".repeat(80), // ceil(80/4) = 20
-        model: "gpt-5.5",
-        modelChanges: [],
-      },
       turns: [preTurn, postTurn],
-      events: [compactionEvent as SessionEvent],
-      children: [],
       warnings: [],
     };
 
     const composed = computeComposition(session);
     const [composedPre, composedPost] = composed.turns;
-    expect(composedPre?.composition.categories.systemPrompt).toBe(100);
-    expect(composedPre?.composition.categories.toolSchemas).toBe(20);
+    assert(composedPre);
+    assert(composedPost);
+    expect(composedPre.composition.categories.systemPrompt).toBe(100);
+    expect(composedPre.composition.categories.toolSchemas).toBe(20);
     // The reset boundary (turnIndex 1) re-seeds from configSnapshot rather
     // than wiping to 0 — the system prompt and tool schemas are resent on
     // every request, so they persist across the compaction.
-    expect(composedPost?.composition.categories.systemPrompt).toBe(100);
-    expect(composedPost?.composition.categories.toolSchemas).toBe(20);
+    expect(composedPost.composition.categories.systemPrompt).toBe(100);
+    expect(composedPost.composition.categories.toolSchemas).toBe(20);
     assertInvariant(composed);
   });
 
@@ -467,7 +485,7 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
         ],
         contextTotal: 100,
       },
-      "claude-code",
+      "claude-code"
     );
     expect(composition.categories.thinking).toBe(0);
     expect(composition.categories.assistantText).toBe(10);
@@ -489,7 +507,7 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
         ],
         contextTotal: 100,
       },
-      "codex",
+      "codex"
     );
     expect(composition.categories.thinking).toBe(100); // ceil(400/4)
     expect(state.runningChars.thinking).toBe(400);
@@ -510,7 +528,7 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
         ],
         contextTotal: 0,
       },
-      "claude-code",
+      "claude-code"
     );
     expect(errorTurnComposition.categories.userText).toBe(0);
     expect(errorTurnComposition.residual).toBe(0);
@@ -520,7 +538,7 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
     const nextComposition = accumulateTurnComposition(
       state,
       { contentSpans: [], contextTotal: 100 },
-      "claude-code",
+      "claude-code"
     );
     expect(nextComposition.categories.userText).toBe(10); // ceil(40/4) — inherited
   });
@@ -540,12 +558,12 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
         ],
         contextTotal: 50,
       },
-      "claude-code",
+      "claude-code"
     );
     const later = accumulateTurnComposition(
       state,
       { contentSpans: [], contextTotal: 60 },
-      "claude-code",
+      "claude-code"
     );
     expect(later.truncated).toBe(true);
   });
@@ -565,7 +583,7 @@ describe("accumulateTurnComposition — direct accumulator tests", () => {
         ],
         contextTotal: 10, // absurdly small vs. the char/4 estimate, on purpose
       },
-      "claude-code",
+      "claude-code"
     );
     expect(composition.categories.userText).toBe(1000);
     expect(composition.residual).toBe(10 - 1000);

@@ -53,16 +53,16 @@ import { formatNumber } from "./table.js";
 
 export interface ReportCategorySegment {
   category: CompositionCategory;
+  pct: number; // 0..1, share of turn.contextTotal
   tokens: number; // char/4 estimate
   tokensLabel: string; // "~"-prefixed
-  pct: number; // 0..1, share of turn.contextTotal
 }
 
 export interface ReportResidualSegment {
+  label: string; // RESIDUAL_LABEL, verbatim
+  pct: number;
   tokens: number; // exact
   tokensLabel: string; // unprefixed
-  pct: number;
-  label: string; // RESIDUAL_LABEL, verbatim
 }
 
 /** One content span, aggregated down to display-safe fields only — no
@@ -70,58 +70,59 @@ export interface ReportResidualSegment {
  * tokensEst/turnRole (not needed by the report's per-turn table). */
 export interface ReportSpanRow {
   category: CompositionCategory;
-  toolName?: string;
   mcpServer?: string;
   tokensLabel: string; // "~"-prefixed — spans are always char/4 estimates
+  toolName?: string;
   truncated: boolean;
 }
 
 export interface ReportCompositionTurn {
-  turnNumber: number;
-  role: string;
-  model: string;
-  contextTotal: number; // exact
   categories: ReportCategorySegment[];
+  contextTotal: number; // exact
+  model: string;
   residual: ReportResidualSegment;
-  truncatedLabel?: string;
+  role: string;
   spans: ReportSpanRow[];
+  truncatedLabel?: string;
+  turnNumber: number;
 }
 
 export interface ReportCompactionRow {
-  index: number;
   atISO: string;
   beforeTurnNumber: number;
-  tokensBeforeLabel: string; // exact, or "unknown"
-  tokensAfterLabel: string; // exact, or "unknown"
-  shrinkLabel: string; // exact, or "unknown"
   discardedLabel: string; // "~"-prefixed estimate, or "unknown"
+  index: number;
   /** codex-only window-chain summary (CompactionEvent.lineage) — undefined
    * when the harness doesn't log window lineage. */
   lineageLabel?: string;
+  shrinkLabel: string; // exact, or "unknown"
+  tokensAfterLabel: string; // exact, or "unknown"
+  tokensBeforeLabel: string; // exact, or "unknown"
 }
 
 export interface ReportModelRow {
-  model: string;
-  turnCount: number;
   contextTotal: number; // exact
   costLabel: string; // exact dollar figure, or "unpriced"
+  model: string;
+  turnCount: number;
 }
 
 export interface ReportToolRow {
-  name: string;
   mcpServer?: string;
-  totalSpanCount: number; // exact
+  name: string;
   tokenShareLabel: string; // "~"-prefixed estimate
+  totalSpanCount: number; // exact
 }
 
 export interface ReportMcpServerRow {
   mcpServer: string;
+  tokenShareLabel: string; // "~"-prefixed estimate
   tools: string[];
   totalSpanCount: number; // exact
-  tokenShareLabel: string; // "~"-prefixed estimate
 }
 
 export interface ReportHeadline {
+  compactionCount: number;
   costLabel: string; // exact dollar figure, or "unpriced"
   costPriced: boolean;
   tokens: {
@@ -131,27 +132,26 @@ export interface ReportHeadline {
     output: number;
   };
   turnCount: number;
-  compactionCount: number;
 }
 
 export interface ReportData {
-  harness: HarnessId;
-  harnessVersion: string;
-  sessionId: string;
-  cwd: string;
-  models: string[];
-  startedAtISO: string;
-  endedAtISO: string;
-  durationLabel: string;
-  headline: ReportHeadline;
-  compositionTurns: ReportCompositionTurn[];
-  residualLabel: string;
-  compactions: ReportCompactionRow[];
+  byMcpServer: ReportMcpServerRow[];
   byModel: ReportModelRow[];
   byTool: ReportToolRow[];
-  byMcpServer: ReportMcpServerRow[];
+  compactions: ReportCompactionRow[];
+  compositionTurns: ReportCompositionTurn[];
+  cwd: string;
+  durationLabel: string;
+  endedAtISO: string;
   generatedAtISO: string;
+  harness: HarnessId;
+  harnessVersion: string;
+  headline: ReportHeadline;
+  models: string[];
   peekVersion: string;
+  residualLabel: string;
+  sessionId: string;
+  startedAtISO: string;
 }
 
 export interface RenderReportOptions {
@@ -165,11 +165,11 @@ export interface RenderReportOptions {
 // ---------------------------------------------------------------------------
 
 const HTML_ESCAPES: Record<string, string> = {
+  "'": "&#39;",
+  '"': "&quot;",
   "&": "&amp;",
   "<": "&lt;",
   ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
 };
 
 function esc(value: string): string {
@@ -181,22 +181,22 @@ function esc(value: string): string {
 // ---------------------------------------------------------------------------
 
 interface CategoryColor {
-  light: string;
   dark: string;
   hatch?: boolean;
+  light: string;
 }
 
 const CATEGORY_COLORS: Record<CompositionCategory, CategoryColor> = {
-  userText: { light: "#2a78d6", dark: "#3987e5" },
-  assistantText: { light: "#eb6834", dark: "#d95926" },
-  thinking: { light: "#1baf7a", dark: "#199e70" },
-  toolResults: { light: "#eda100", dark: "#c98500" },
-  toolCallArgs: { light: "#e87ba4", dark: "#d55181" },
-  instructionInjection: { light: "#008300", dark: "#008300" },
-  systemPrompt: { light: "#4a3aa7", dark: "#9085e9" },
-  toolSchemas: { light: "#e34948", dark: "#e66767" },
-  compactionSummaries: { light: "#2a78d6", dark: "#3987e5", hatch: true },
-  coordination: { light: "#eb6834", dark: "#d95926", hatch: true },
+  assistantText: { dark: "#d95926", light: "#eb6834" },
+  compactionSummaries: { dark: "#3987e5", hatch: true, light: "#2a78d6" },
+  coordination: { dark: "#d95926", hatch: true, light: "#eb6834" },
+  instructionInjection: { dark: "#008300", light: "#008300" },
+  systemPrompt: { dark: "#9085e9", light: "#4a3aa7" },
+  thinking: { dark: "#199e70", light: "#1baf7a" },
+  toolCallArgs: { dark: "#d55181", light: "#e87ba4" },
+  toolResults: { dark: "#c98500", light: "#eda100" },
+  toolSchemas: { dark: "#e66767", light: "#e34948" },
+  userText: { dark: "#3987e5", light: "#2a78d6" },
 };
 
 // CompositionCategory's declared order (model/types.ts) — re-declared here
@@ -227,10 +227,10 @@ function categoryCssVar(category: CompositionCategory): string {
 
 function buildCss(): string {
   const catVarsLight = COMPOSITION_CATEGORY_ORDER.map(
-    (c) => `--cat-${c}: ${CATEGORY_COLORS[c].light};`,
+    (c) => `--cat-${c}: ${CATEGORY_COLORS[c].light};`
   ).join("\n      ");
   const catVarsDark = COMPOSITION_CATEGORY_ORDER.map(
-    (c) => `--cat-${c}: ${CATEGORY_COLORS[c].dark};`,
+    (c) => `--cat-${c}: ${CATEGORY_COLORS[c].dark};`
   ).join("\n      ");
 
   return `
@@ -433,7 +433,7 @@ function buildHeader(data: ReportData): string {
 
 function buildStats(data: ReportData): string {
   const h = data.headline;
-  const tiles: Array<[string, string]> = [
+  const tiles: [string, string][] = [
     ["Total cost", esc(h.costLabel)],
     ["Input tokens", formatNumber(h.tokens.inputUncached)],
     ["Cache read", formatNumber(h.tokens.cacheRead)],
@@ -448,7 +448,7 @@ function buildStats(data: ReportData): string {
         <div class="tile">
           <div class="tile-label">${label}</div>
           <div class="tile-value">${value}</div>
-        </div>`,
+        </div>`
     )
     .join("");
   return `
@@ -458,11 +458,13 @@ function buildStats(data: ReportData): string {
 }
 
 function categoriesUsed(
-  turns: readonly ReportCompositionTurn[],
+  turns: readonly ReportCompositionTurn[]
 ): CompositionCategory[] {
   const seen = new Set<CompositionCategory>();
   for (const turn of turns) {
-    for (const c of turn.categories) seen.add(c.category);
+    for (const c of turn.categories) {
+      seen.add(c.category);
+    }
   }
   return COMPOSITION_CATEGORY_ORDER.filter((c) => seen.has(c));
 }
@@ -475,7 +477,7 @@ function buildLegend(data: ReportData): string {
         <div class="legend-item">
           <span class="swatch" style="background:${categoryCssVar(c)}"></span>
           ${esc(c)}
-        </div>`,
+        </div>`
     )
     .join("");
   const residualItem = `
@@ -501,10 +503,10 @@ function buildResidualSegment(residual: ReportResidualSegment): string {
 function buildTurnBreakdownList(turn: ReportCompositionTurn): string {
   const items = turn.categories.map(
     (c) =>
-      `<li>${esc(c.category)}: ${esc(c.tokensLabel)} (${(c.pct * 100).toFixed(1)}%)</li>`,
+      `<li>${esc(c.category)}: ${esc(c.tokensLabel)} (${(c.pct * 100).toFixed(1)}%)</li>`
   );
   items.push(
-    `<li>residual: ${esc(turn.residual.tokensLabel)} (${(turn.residual.pct * 100).toFixed(1)}%) — ${esc(turn.residual.label)}</li>`,
+    `<li>residual: ${esc(turn.residual.tokensLabel)} (${(turn.residual.pct * 100).toFixed(1)}%) — ${esc(turn.residual.label)}</li>`
   );
   return items.join("");
 }
@@ -513,8 +515,8 @@ function buildSpanRow(span: ReportSpanRow): string {
   return `
     <tr>
       <td>${esc(span.category)}</td>
-      <td>${span.toolName !== undefined ? esc(span.toolName) : "—"}</td>
-      <td>${span.mcpServer !== undefined ? esc(span.mcpServer) : "—"}</td>
+      <td>${span.toolName === undefined ? "—" : esc(span.toolName)}</td>
+      <td>${span.mcpServer === undefined ? "—" : esc(span.mcpServer)}</td>
       <td>${esc(span.tokensLabel)}</td>
       <td>${span.truncated ? "yes" : "no"}</td>
     </tr>`;
@@ -585,9 +587,9 @@ function buildComposition(data: ReportData): string {
 
 function buildCompactionCard(row: ReportCompactionRow): string {
   const lineageLine =
-    row.lineageLabel !== undefined
-      ? `<div class="compaction-lineage">chain: ${esc(row.lineageLabel)}</div>`
-      : "";
+    row.lineageLabel === undefined
+      ? ""
+      : `<div class="compaction-lineage">chain: ${esc(row.lineageLabel)}</div>`;
   return `
     <div class="compaction-card">
       <div class="compaction-marker">Compaction #${row.index + 1} — before turn ${row.beforeTurnNumber}</div>
@@ -617,7 +619,9 @@ function buildCompactions(data: ReportData): string {
 }
 
 function buildModelTable(rows: readonly ReportModelRow[]): string {
-  if (rows.length === 0) return `<p class="empty-note">No turns recorded.</p>`;
+  if (rows.length === 0) {
+    return `<p class="empty-note">No turns recorded.</p>`;
+  }
   const body = rows
     .map(
       (r) => `
@@ -626,7 +630,7 @@ function buildModelTable(rows: readonly ReportModelRow[]): string {
           <td>${formatNumber(r.turnCount)}</td>
           <td>${formatNumber(r.contextTotal)}</td>
           <td>${esc(r.costLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -640,8 +644,9 @@ function buildModelTable(rows: readonly ReportModelRow[]): string {
 }
 
 function buildToolTable(rows: readonly ReportToolRow[]): string {
-  if (rows.length === 0)
+  if (rows.length === 0) {
     return `<p class="empty-note">No tool calls recorded.</p>`;
+  }
   const body = rows
     .map(
       (r) => `
@@ -649,7 +654,7 @@ function buildToolTable(rows: readonly ReportToolRow[]): string {
           <td>${esc(r.name)}${r.mcpServer ? ` <span class="mcp-tag">(${esc(r.mcpServer)})</span>` : ""}</td>
           <td>${formatNumber(r.totalSpanCount)}</td>
           <td>${esc(r.tokenShareLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -663,8 +668,9 @@ function buildToolTable(rows: readonly ReportToolRow[]): string {
 }
 
 function buildMcpServerTable(rows: readonly ReportMcpServerRow[]): string {
-  if (rows.length === 0)
+  if (rows.length === 0) {
     return `<p class="empty-note">No MCP server calls recorded.</p>`;
+  }
   const body = rows
     .map(
       (r) => `
@@ -673,7 +679,7 @@ function buildMcpServerTable(rows: readonly ReportMcpServerRow[]): string {
           <td>${esc(r.tools.join(", "))}</td>
           <td>${formatNumber(r.totalSpanCount)}</td>
           <td>${esc(r.tokenShareLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -714,9 +720,11 @@ function buildFooter(data: ReportData): string {
 
 function buildJsonEmbed(
   data: ReportData,
-  enabled: boolean | undefined,
+  enabled: boolean | undefined
 ): string {
-  if (!enabled) return "";
+  if (!enabled) {
+    return "";
+  }
   // application/json — never executed as script by any browser, but a
   // field value containing a literal "</script>" (e.g. a session-log-
   // originated cwd) would still close this tag early and let anything
@@ -738,7 +746,7 @@ function buildJsonEmbed(
  */
 export function renderReportHtml(
   data: ReportData,
-  options: RenderReportOptions = {},
+  options: RenderReportOptions = {}
 ): string {
   const title = `peek report — ${esc(data.sessionId)}`;
   return `<!doctype html>
@@ -776,7 +784,9 @@ ${buildJsonEmbed(data, options.jsonEmbed)}
 // ---------------------------------------------------------------------------
 
 function buildDiffWarnings(report: DiffReport): string {
-  if (report.comparabilityWarnings.length === 0) return "";
+  if (report.comparabilityWarnings.length === 0) {
+    return "";
+  }
   const items = report.comparabilityWarnings
     .map((w) => `<li>${esc(w)}</li>`)
     .join("");
@@ -790,7 +800,7 @@ function buildDiffWarnings(report: DiffReport): string {
 
 function buildDiffMetaTable(report: DiffReport): string {
   const { a, b } = report.meta;
-  const rows: Array<[string, string, string]> = [
+  const rows: [string, string, string][] = [
     ["id", a.id, b.id],
     ["harness", a.harness, b.harness],
     ["version", a.harnessVersion, b.harnessVersion],
@@ -801,7 +811,7 @@ function buildDiffMetaTable(report: DiffReport): string {
   const body = rows
     .map(
       ([field, av, bv]) => `
-        <tr><td>${esc(field ?? "")}</td><td>${esc(av ?? "")}</td><td>${esc(bv ?? "")}</td></tr>`,
+        <tr><td>${esc(field ?? "")}</td><td>${esc(av ?? "")}</td><td>${esc(bv ?? "")}</td></tr>`
     )
     .join("");
   return `
@@ -827,7 +837,7 @@ function buildDiffTotalsTable(report: DiffReport): string {
           <td>${esc(r.bLabel)}</td>
           <td>${esc(r.deltaLabel)}</td>
           <td>${esc(r.pctLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -866,7 +876,7 @@ function buildDiffComposition(report: DiffReport): string {
           <td>${esc(r.aLabel)}</td>
           <td>${esc(r.bLabel)}</td>
           <td>${esc(r.deltaLabel)}</td>
-        </tr>`,
+        </tr>`
     )
     .join("");
   return `
@@ -914,8 +924,8 @@ function buildDiffFooter(peekVersion: string, generatedAtISO: string): string {
 }
 
 export interface RenderDiffReportOptions {
-  peekVersion?: string;
   generatedAtISO?: string;
+  peekVersion?: string;
 }
 
 /**
@@ -925,7 +935,7 @@ export interface RenderDiffReportOptions {
  */
 export function renderDiffHtml(
   report: DiffReport,
-  options: RenderDiffReportOptions = {},
+  options: RenderDiffReportOptions = {}
 ): string {
   const title = `peek diff — ${esc(report.meta.a.id)} vs ${esc(report.meta.b.id)}`;
   const peekVersion = options.peekVersion ?? "unknown";

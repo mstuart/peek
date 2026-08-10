@@ -19,29 +19,29 @@ const KNOWN_ENTRY_TYPES = new Set([
 ]);
 
 export interface PiSessionHeader {
+  cwd: string;
+  id: string;
+  parentSession?: string;
+  timestamp: string;
   type: "session";
   version?: number;
-  id: string;
-  timestamp: string;
-  cwd: string;
-  parentSession?: string;
 }
 
 export interface PiEntry {
-  type: string;
-  id: string;
-  parentId: string | null;
-  timestamp: string;
   /** Remaining entry-specific fields (message, summary, usage, ...), left
    * unparsed here — that's T6.3's job. */
   data: Record<string, unknown>;
+  id: string;
+  parentId: string | null;
+  timestamp: string;
+  type: string;
 }
 
 export interface PiEntryTree {
-  header: PiSessionHeader;
   /** Insertion-ordered by file appearance (JS Map preserves insertion order),
    * which is what activeLeaf()/pathToRoot() rely on. */
   entries: Map<string, PiEntry>;
+  header: PiSessionHeader;
 }
 
 export type PiTreeParseResult =
@@ -55,15 +55,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Parse a pi session file's lines into an entry tree, or detect+flag System
  * B (harness v4) sessions for the caller to skip. Never throws: malformed
  * lines are reported as warnings and skipped. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Entry-type dispatch is intentionally explicit and tolerant.
 export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
   const warnings: ParseWarning[] = [];
 
-  const headerLine = lines[0];
+  const [headerLine] = lines;
   if (headerLine === undefined || headerLine.trim() === "") {
     warnings.push({
       code: "pi-empty-file",
-      message: "pi session file has no header line",
       line: 1,
+      message: "pi session file has no header line",
     });
     return { systemB: false, tree: null, warnings };
   }
@@ -74,8 +75,8 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
   } catch {
     warnings.push({
       code: "pi-malformed-header",
-      message: "pi session header line is not valid JSON",
       line: 1,
+      message: "pi session header line is not valid JSON",
     });
     return { systemB: false, tree: null, warnings };
   }
@@ -83,8 +84,8 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
   if (!isRecord(headerRaw)) {
     warnings.push({
       code: "pi-malformed-header",
-      message: "pi session header line is not a JSON object",
       line: 1,
+      message: "pi session header line is not a JSON object",
     });
     return { systemB: false, tree: null, warnings };
   }
@@ -106,29 +107,33 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
   ) {
     warnings.push({
       code: "pi-malformed-header",
-      message: "pi session header is missing required fields",
       line: 1,
+      message: "pi session header is missing required fields",
     });
     return { systemB: false, tree: null, warnings };
   }
 
   const header: PiSessionHeader = {
-    type: "session",
+    cwd: headerRaw.cwd,
     id: headerRaw.id,
     timestamp: headerRaw.timestamp,
-    cwd: headerRaw.cwd,
+    type: "session",
   };
-  if (typeof headerRaw.version === "number") header.version = headerRaw.version;
+  if (typeof headerRaw.version === "number") {
+    header.version = headerRaw.version;
+  }
   if (typeof headerRaw.parentSession === "string") {
     header.parentSession = headerRaw.parentSession;
   }
 
   const entries = new Map<string, PiEntry>();
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 1; i < lines.length; i += 1) {
     const raw = lines[i];
     const lineNo = i + 1;
-    if (raw === undefined || raw.trim() === "") continue;
+    if (raw === undefined || raw.trim() === "") {
+      continue;
+    }
 
     let parsed: unknown;
     try {
@@ -136,8 +141,8 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
     } catch {
       warnings.push({
         code: "pi-malformed-entry",
-        message: "pi entry line is not valid JSON",
         line: lineNo,
+        message: "pi entry line is not valid JSON",
       });
       continue;
     }
@@ -152,8 +157,8 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
     ) {
       warnings.push({
         code: "pi-malformed-entry",
-        message: "pi entry line is missing required fields",
         line: lineNo,
+        message: "pi entry line is missing required fields",
         ...(isRecord(parsed) && typeof parsed.type === "string"
           ? { recordType: parsed.type }
           : {}),
@@ -164,8 +169,8 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
     if (!KNOWN_ENTRY_TYPES.has(parsed.type)) {
       warnings.push({
         code: "pi-unknown-entry-type",
-        message: `unknown pi entry type: ${parsed.type}`,
         line: lineNo,
+        message: `unknown pi entry type: ${parsed.type}`,
         recordType: parsed.type,
       });
       // Still linked into the tree below — an unrecognized type doesn't
@@ -174,22 +179,24 @@ export function parsePiEntryTree(lines: string[]): PiTreeParseResult {
 
     const { type, id, parentId, timestamp, ...data } = parsed;
     entries.set(id, {
-      type,
+      data,
       id,
       parentId: parentId as string | null,
       timestamp,
-      data,
+      type,
     });
   }
 
-  return { systemB: false, tree: { header, entries }, warnings };
+  return { systemB: false, tree: { entries, header }, warnings };
 }
 
 /** Active leaf = most recently appended entry (file order), per
  * docs/recon/pi.md: "recomputed, not stored". */
 export function activeLeaf(entries: Map<string, PiEntry>): string | undefined {
   let last: string | undefined;
-  for (const id of entries.keys()) last = id;
+  for (const id of entries.keys()) {
+    last = id;
+  }
   return last;
 }
 
@@ -198,17 +205,21 @@ export function activeLeaf(entries: Map<string, PiEntry>): string | undefined {
  * rather than throwing. */
 export function pathToRoot(
   entries: Map<string, PiEntry>,
-  leafId: string,
+  leafId: string
 ): string[] {
   const path: string[] = [];
   const visited = new Set<string>();
   let currentId: string | null = leafId;
 
   while (currentId !== null) {
-    if (visited.has(currentId)) break;
+    if (visited.has(currentId)) {
+      break;
+    }
     visited.add(currentId);
     const entry = entries.get(currentId);
-    if (!entry) break;
+    if (!entry) {
+      break;
+    }
     path.push(entry.id);
     currentId = entry.parentId;
   }

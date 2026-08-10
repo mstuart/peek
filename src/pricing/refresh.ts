@@ -8,8 +8,8 @@ import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type FetchModelsDevOptions,
-  MODELS_DEV_API_URL,
   fetchModelsDevPricing,
+  MODELS_DEV_API_URL,
   resolveModelsDevCachePath,
 } from "./modelsDev.js";
 
@@ -40,17 +40,17 @@ async function tightenPerms(targetPath: string, mode: number): Promise<void> {
 }
 
 export interface RefreshPricingOptions {
+  /** Test-only escape hatch: overrides the XDG cache path the snapshot is written to. */
+  cachePathOverride?: string;
   /** Test-only escape hatch: injects a fake fetch instead of hitting the network. */
   fetchImpl?: FetchModelsDevOptions["fetchImpl"];
   timeoutMs?: number;
-  /** Test-only escape hatch: overrides the XDG cache path the snapshot is written to. */
-  cachePathOverride?: string;
 }
 
 export interface RefreshPricingResult {
-  outputPath: string;
   fetchedAt: string;
   modelCount: number;
+  outputPath: string;
 }
 
 /**
@@ -60,26 +60,28 @@ export interface RefreshPricingResult {
  * partial/corrupt file in place: validation happens entirely before any write.
  */
 export async function refreshPricingSnapshot(
-  options: RefreshPricingOptions = {},
+  options: RefreshPricingOptions = {}
 ): Promise<RefreshPricingResult> {
   const fetchOptions: FetchModelsDevOptions = {};
-  if (options.fetchImpl !== undefined)
+  if (options.fetchImpl !== undefined) {
     fetchOptions.fetchImpl = options.fetchImpl;
-  if (options.timeoutMs !== undefined)
+  }
+  if (options.timeoutMs !== undefined) {
     fetchOptions.timeoutMs = options.timeoutMs;
+  }
 
   const snapshot = await fetchModelsDevPricing(fetchOptions);
   const modelCount = Object.keys(snapshot.models).length;
   if (modelCount < MIN_EXPECTED_MODELS) {
     throw new Error(
       `refreshPricingSnapshot: only ${modelCount} priced models parsed from ${MODELS_DEV_API_URL} ` +
-        `(expected at least ${MIN_EXPECTED_MODELS}) — payload looks truncated or malformed, refusing to write cache`,
+        `(expected at least ${MIN_EXPECTED_MODELS}) — payload looks truncated or malformed, refusing to write cache`
     );
   }
 
   const outputPath = resolveModelsDevCachePath(options.cachePathOverride);
   const dir = path.dirname(outputPath);
-  await mkdir(dir, { recursive: true, mode: CACHE_DIR_MODE });
+  await mkdir(dir, { mode: CACHE_DIR_MODE, recursive: true });
   await tightenPerms(dir, CACHE_DIR_MODE);
   const tmpPath = `${outputPath}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmpPath, JSON.stringify(snapshot), {
@@ -89,5 +91,5 @@ export async function refreshPricingSnapshot(
   await tightenPerms(tmpPath, CACHE_FILE_MODE); // chmod before rename
   await rename(tmpPath, outputPath);
 
-  return { outputPath, fetchedAt: snapshot.fetchedAt, modelCount };
+  return { fetchedAt: snapshot.fetchedAt, modelCount, outputPath };
 }

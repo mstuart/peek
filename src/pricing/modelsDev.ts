@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: Preserve the existing public module path.
 // models.dev fallback pricing — DESIGN.md accounting rule 4's second tier:
 // "vendored LiteLLM snapshot -> models.dev fallback -> 2x-input hardcode".
 //
@@ -81,15 +82,16 @@ function numOrUndef(value: unknown): number | undefined {
 }
 
 interface RawCost {
-  input?: unknown;
-  output?: unknown;
   cache_read?: unknown;
   cache_write?: unknown;
   context_over_200k?: unknown;
+  input?: unknown;
+  output?: unknown;
 }
 
 const MILLION = 1_000_000;
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: External pricing fields require explicit validation and fallback mapping.
 function toModelPrice(rawCost: RawCost): ModelPrice | null {
   const input = numOrUndef(rawCost.input);
   const output = numOrUndef(rawCost.output);
@@ -116,16 +118,16 @@ function toModelPrice(rawCost: RawCost): ModelPrice | null {
     ) {
       tiering = {
         thresholdTokens: 200_000,
-        ...(tInput !== undefined ? { input: tInput / MILLION } : {}),
-        ...(tOutput !== undefined ? { output: tOutput / MILLION } : {}),
-        ...(tCacheRead !== undefined
-          ? { cacheRead: tCacheRead / MILLION }
-          : {}),
+        ...(tInput === undefined ? {} : { input: tInput / MILLION }),
+        ...(tOutput === undefined ? {} : { output: tOutput / MILLION }),
+        ...(tCacheRead === undefined
+          ? {}
+          : { cacheRead: tCacheRead / MILLION }),
         // models.dev's tier cache_write is the same (only) TTL as the base cache_write below —
         // mapped to cacheCreation5m, mirroring the base-rate mapping just below.
-        ...(tCacheWrite !== undefined
-          ? { cacheCreation5m: tCacheWrite / MILLION }
-          : {}),
+        ...(tCacheWrite === undefined
+          ? {}
+          : { cacheCreation5m: tCacheWrite / MILLION }),
       };
     }
   }
@@ -134,12 +136,12 @@ function toModelPrice(rawCost: RawCost): ModelPrice | null {
   const cacheWrite = numOrUndef(rawCost.cache_write);
 
   return {
-    input: input / MILLION,
-    output: output / MILLION,
-    cacheRead: cacheRead !== undefined ? cacheRead / MILLION : null,
-    cacheCreation5m: cacheWrite !== undefined ? cacheWrite / MILLION : null,
     // models.dev carries no 1-hour-TTL cache-write field at all — see header comment.
     cacheCreation1h: null,
+    cacheCreation5m: cacheWrite === undefined ? null : cacheWrite / MILLION,
+    cacheRead: cacheRead === undefined ? null : cacheRead / MILLION,
+    input: input / MILLION,
+    output: output / MILLION,
     tiering,
   };
 }
@@ -150,9 +152,12 @@ function toModelPrice(rawCost: RawCost): ModelPrice | null {
  * above. Tolerant of malformed/missing fields at every level — a bad provider or model entry is
  * skipped, never thrown. Returns an empty map for a non-object root.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: External payload traversal validates every nested provider/model boundary.
 export function mapModelsDevPayload(raw: unknown): Record<string, ModelPrice> {
   const result: Record<string, ModelPrice> = {};
-  if (typeof raw !== "object" || raw === null) return result;
+  if (typeof raw !== "object" || raw === null) {
+    return result;
+  }
 
   // Two passes: canonical providers first (in priority order), then everything else — so a
   // later canonical provider never gets clobbered by an earlier non-canonical one, and a
@@ -166,19 +171,31 @@ export function mapModelsDevPayload(raw: unknown): Record<string, ModelPrice> {
 
   for (const providerId of orderedProviderIds) {
     const provider = providers[providerId];
-    if (typeof provider !== "object" || provider === null) continue;
-    const models = (provider as Record<string, unknown>).models;
-    if (typeof models !== "object" || models === null) continue;
+    if (typeof provider !== "object" || provider === null) {
+      continue;
+    }
+    const { models } = provider as Record<string, unknown>;
+    if (typeof models !== "object" || models === null) {
+      continue;
+    }
 
     for (const [modelId, modelEntry] of Object.entries(
-      models as Record<string, unknown>,
+      models as Record<string, unknown>
     )) {
-      if (modelId in result) continue; // already set by a higher-priority provider
-      if (typeof modelEntry !== "object" || modelEntry === null) continue;
+      if (modelId in result) {
+        continue; // already set by a higher-priority provider
+      }
+      if (typeof modelEntry !== "object" || modelEntry === null) {
+        continue;
+      }
       const rawCost = (modelEntry as Record<string, unknown>).cost;
-      if (typeof rawCost !== "object" || rawCost === null) continue;
+      if (typeof rawCost !== "object" || rawCost === null) {
+        continue;
+      }
       const price = toModelPrice(rawCost as RawCost);
-      if (price) result[modelId] = price;
+      if (price) {
+        result[modelId] = price;
+      }
     }
   }
 
@@ -194,12 +211,12 @@ export function mapModelsDevPayload(raw: unknown): Record<string, ModelPrice> {
  * tests can pass a plain mock object instead of constructing a real Response. */
 export type FetchLike = (
   url: string,
-  init?: { signal?: AbortSignal },
+  init?: { signal?: AbortSignal }
 ) => Promise<{
   ok: boolean;
   status: number;
   statusText: string;
-  json(): Promise<unknown>;
+  json: () => Promise<unknown>;
 }>;
 
 export interface FetchModelsDevOptions {
@@ -212,7 +229,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 /** Fetches and maps the live models.dev pricing payload. Throws a clear Error on network
  * failure, timeout, non-2xx response, or unparseable JSON — never returns a partial result. */
 export async function fetchModelsDevPricing(
-  options: FetchModelsDevOptions = {},
+  options: FetchModelsDevOptions = {}
 ): Promise<ModelsDevSnapshot> {
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -228,6 +245,7 @@ export async function fetchModelsDevPricing(
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
       `fetchModelsDevPricing: request to ${MODELS_DEV_API_URL} failed (${reason})`,
+      { cause: err }
     );
   } finally {
     clearTimeout(timer);
@@ -235,7 +253,7 @@ export async function fetchModelsDevPricing(
 
   if (!response.ok) {
     throw new Error(
-      `fetchModelsDevPricing: ${MODELS_DEV_API_URL} responded ${response.status} ${response.statusText}`,
+      `fetchModelsDevPricing: ${MODELS_DEV_API_URL} responded ${response.status} ${response.statusText}`
     );
   }
 
@@ -246,6 +264,7 @@ export async function fetchModelsDevPricing(
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
       `fetchModelsDevPricing: ${MODELS_DEV_API_URL} response was not valid JSON (${reason})`,
+      { cause: err }
     );
   }
 
@@ -265,16 +284,24 @@ const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 /** `${XDG_CACHE_HOME ?? ~/.cache}/peek/models-dev.json` — mirrors cache/totals.ts's
  * resolveCachePath convention. `override` is a test-only escape hatch. */
 export function resolveModelsDevCachePath(override?: string): string {
-  if (override) return override;
+  if (override) {
+    return override;
+  }
   const base = process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache");
   return path.join(base, "peek", "models-dev.json");
 }
 
 function isValidSnapshot(value: unknown): value is ModelsDevSnapshot {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
   const v = value as Record<string, unknown>;
-  if (typeof v.fetchedAt !== "string") return false;
-  if (typeof v.models !== "object" || v.models === null) return false;
+  if (typeof v.fetchedAt !== "string") {
+    return false;
+  }
+  if (typeof v.models !== "object" || v.models === null) {
+    return false;
+  }
   return true;
 }
 
@@ -292,10 +319,16 @@ function isValidNullablePriceNumber(value: unknown): boolean {
 }
 
 function isValidTiering(value: unknown): boolean {
-  if (value === null) return true;
-  if (typeof value !== "object") return false;
+  if (value === null) {
+    return true;
+  }
+  if (typeof value !== "object") {
+    return false;
+  }
   const t = value as Record<string, unknown>;
-  if (t.thresholdTokens !== 200_000) return false;
+  if (t.thresholdTokens !== 200_000) {
+    return false;
+  }
   const optionalFields = [
     "input",
     "output",
@@ -304,7 +337,9 @@ function isValidTiering(value: unknown): boolean {
     "cacheCreation1h",
   ] as const;
   for (const key of optionalFields) {
-    if (key in t && !isValidPriceNumber(t[key])) return false;
+    if (key in t && !isValidPriceNumber(t[key])) {
+      return false;
+    }
   }
   return true;
 }
@@ -315,14 +350,28 @@ function isValidTiering(value: unknown): boolean {
  * establishes for network-fetched data — needed again here because this is the disk-read
  * path, which trusts a file that isn't re-validated at fetch time. */
 function isValidModelPrice(value: unknown): value is ModelPrice {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
   const p = value as Record<string, unknown>;
-  if (!isValidPriceNumber(p.input)) return false;
-  if (!isValidPriceNumber(p.output)) return false;
-  if (!isValidNullablePriceNumber(p.cacheRead)) return false;
-  if (!isValidNullablePriceNumber(p.cacheCreation5m)) return false;
-  if (!isValidNullablePriceNumber(p.cacheCreation1h)) return false;
-  if (!isValidTiering(p.tiering)) return false;
+  if (!isValidPriceNumber(p.input)) {
+    return false;
+  }
+  if (!isValidPriceNumber(p.output)) {
+    return false;
+  }
+  if (!isValidNullablePriceNumber(p.cacheRead)) {
+    return false;
+  }
+  if (!isValidNullablePriceNumber(p.cacheCreation5m)) {
+    return false;
+  }
+  if (!isValidNullablePriceNumber(p.cacheCreation1h)) {
+    return false;
+  }
+  if (!isValidTiering(p.tiering)) {
+    return false;
+  }
   return true;
 }
 
@@ -332,17 +381,19 @@ function isValidModelPrice(value: unknown): value is ModelPrice {
  * drop is the deliberate, less-surprising choice here — the alternative (reject-on-any-bad-leaf)
  * would turn one corrupt row into a total fallback-pricing outage. */
 function sanitizeSnapshotModels(
-  models: Record<string, unknown>,
+  models: Record<string, unknown>
 ): Record<string, ModelPrice> {
   const result: Record<string, ModelPrice> = {};
   for (const [modelId, price] of Object.entries(models)) {
-    if (isValidModelPrice(price)) result[modelId] = price;
+    if (isValidModelPrice(price)) {
+      result[modelId] = price;
+    }
   }
   return result;
 }
 
 function readCachedSnapshotFromDisk(
-  cachePath: string,
+  cachePath: string
 ): ModelsDevSnapshot | null {
   let raw: string;
   try {
@@ -367,16 +418,19 @@ function readCachedSnapshotFromDisk(
   } catch {
     return null; // corrupt JSON — silently ignored
   }
-  if (!isValidSnapshot(parsed)) return null; // wrong/stale shape — silently ignored
+  if (!isValidSnapshot(parsed)) {
+    return null; // wrong/stale shape — silently ignored
+  }
 
   const ageMs = Date.now() - new Date(parsed.fetchedAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > CACHE_MAX_AGE_MS)
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > CACHE_MAX_AGE_MS) {
     return null; // stale
+  }
 
   return {
     fetchedAt: parsed.fetchedAt,
     models: sanitizeSnapshotModels(
-      parsed.models as unknown as Record<string, unknown>,
+      parsed.models as unknown as Record<string, unknown>
     ),
   };
 }
@@ -392,11 +446,13 @@ const snapshotCacheByPath = new Map<string, ModelsDevSnapshot | null>();
  * older than 30 days — never throws. `cachePathOverride` is a test-only escape hatch (see
  * resolveModelsDevCachePath). */
 export function loadCachedModelsDevSnapshot(
-  cachePathOverride?: string,
+  cachePathOverride?: string
 ): ModelsDevSnapshot | null {
   const cachePath = resolveModelsDevCachePath(cachePathOverride);
   const cached = snapshotCacheByPath.get(cachePath);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   const result = readCachedSnapshotFromDisk(cachePath);
   snapshotCacheByPath.set(cachePath, result);
   return result;
@@ -414,13 +470,17 @@ const DATE_SUFFIX_RE = /-(\d{4}-\d{2}-\d{2}|\d{8})$/;
  */
 export function lookupWithFallback(
   modelId: string,
-  opts: { modelsDevSnapshot: ModelsDevSnapshot | null },
+  opts: { modelsDevSnapshot: ModelsDevSnapshot | null }
 ): ModelPrice | null {
   const snapshot = opts.modelsDevSnapshot;
-  if (!snapshot) return null;
+  if (!snapshot) {
+    return null;
+  }
 
   const direct = snapshot.models[modelId];
-  if (direct) return direct;
+  if (direct) {
+    return direct;
+  }
 
   const withoutPrefix = modelId.replace(PROVIDER_PREFIX_RE, "");
   const candidates = new Set<string>([
@@ -430,9 +490,13 @@ export function lookupWithFallback(
   ]);
 
   for (const candidate of candidates) {
-    if (candidate === modelId) continue;
+    if (candidate === modelId) {
+      continue;
+    }
     const price = snapshot.models[candidate];
-    if (price) return price;
+    if (price) {
+      return price;
+    }
   }
 
   return null;

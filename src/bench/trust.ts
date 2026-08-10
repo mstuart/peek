@@ -11,8 +11,8 @@ import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -35,7 +35,9 @@ export interface TrustStoreEntry {
 export type TrustStore = Record<string, TrustStoreEntry>;
 
 function resolveTrustStorePath(override?: string): string {
-  if (override) return override;
+  if (override) {
+    return override;
+  }
   const base = process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache");
   return path.join(base, "peek", "trusted-suites.json");
 }
@@ -60,10 +62,13 @@ async function tightenPerms(targetPath: string, mode: number): Promise<void> {
 }
 
 function isValidStore(value: unknown): value is TrustStore {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
+  }
   return Object.values(value as Record<string, unknown>).every((v) => {
-    if (typeof v !== "object" || v === null) return false;
+    if (typeof v !== "object" || v === null) {
+      return false;
+    }
     const e = v as Record<string, unknown>;
     return (
       typeof e.firstTrustedAt === "string" && typeof e.suitePath === "string"
@@ -76,7 +81,7 @@ function isValidStore(value: unknown): value is TrustStore {
  * case is re-prompting for trust). Tightens pre-existing loose permissions on a successful
  * read, mirroring cache/totals.ts's load-time tightening. */
 export async function loadTrustStore(
-  storePathOverride?: string,
+  storePathOverride?: string
 ): Promise<TrustStore> {
   const storePath = resolveTrustStorePath(storePathOverride);
   let raw: string;
@@ -100,7 +105,7 @@ export async function loadTrustStore(
 /** Whether `hash` has already been trusted. */
 export async function isSuiteTrusted(
   hash: string,
-  storePathOverride?: string,
+  storePathOverride?: string
 ): Promise<boolean> {
   const store = await loadTrustStore(storePathOverride);
   return hash in store;
@@ -111,7 +116,7 @@ export async function isSuiteTrusted(
 export async function trustSuite(
   hash: string,
   suitePath: string,
-  storePathOverride?: string,
+  storePathOverride?: string
 ): Promise<void> {
   const storePath = resolveTrustStorePath(storePathOverride);
   const store = await loadTrustStore(storePathOverride);
@@ -120,7 +125,7 @@ export async function trustSuite(
   }
 
   const dir = path.dirname(storePath);
-  await mkdir(dir, { recursive: true, mode: STORE_DIR_MODE });
+  await mkdir(dir, { mode: STORE_DIR_MODE, recursive: true });
   await tightenPerms(dir, STORE_DIR_MODE);
   await writeFile(storePath, `${JSON.stringify(store, null, 2)}\n`, {
     encoding: "utf8",
@@ -145,8 +150,8 @@ const CONFIG_OVERLAY_FILES = [
 ];
 
 interface HashEntry {
-  key: string;
   data: Buffer;
+  key: string;
 }
 
 async function suiteFileEntries(suiteDir: string): Promise<HashEntry[]> {
@@ -160,8 +165,9 @@ async function suiteFileEntries(suiteDir: string): Promise<HashEntry[]> {
   const entries: HashEntry[] = [];
   for (const file of files) {
     entries.push({
-      key: `suite/${file}`,
+      // biome-ignore lint/performance/noAwaitInLoops: Preserve deterministic hash-entry ordering.
       data: await readFile(path.join(suiteDir, file)),
+      key: `suite/${file}`,
     });
   }
   return entries;
@@ -169,15 +175,18 @@ async function suiteFileEntries(suiteDir: string): Promise<HashEntry[]> {
 
 async function configFileEntries(
   config: ConfigVariant,
-  role: "a" | "b",
+  role: "a" | "b"
 ): Promise<HashEntry[]> {
-  if (config.dir === "current") return [];
+  if (config.dir === "current") {
+    return [];
+  }
   const entries: HashEntry[] = [];
   for (const rel of CONFIG_OVERLAY_FILES) {
     try {
       entries.push({
-        key: `config-${role}/${rel}`,
+        // biome-ignore lint/performance/noAwaitInLoops: Preserve deterministic hash-entry ordering.
         data: await readFile(path.join(config.dir, rel)),
+        key: `config-${role}/${rel}`,
       });
     } catch {
       // not present in this variant — skip, mirrors config.ts's fileExists check
@@ -196,7 +205,7 @@ async function configFileEntries(
  */
 export async function computeSuiteHash(
   suiteDir: string,
-  configs: readonly [ConfigVariant, ConfigVariant],
+  configs: readonly [ConfigVariant, ConfigVariant]
 ): Promise<string> {
   const entries = [
     ...(await suiteFileEntries(suiteDir)),
@@ -222,6 +231,7 @@ async function existingOverlayFiles(dir: string): Promise<string[]> {
   const found: string[] = [];
   for (const rel of CONFIG_OVERLAY_FILES) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: Keep optional overlay probing bounded and ordered.
       await stat(path.join(dir, rel));
       found.push(rel);
     } catch {
@@ -239,17 +249,19 @@ async function existingOverlayFiles(dir: string): Promise<string[]> {
 export async function formatTrustPrompt(
   suiteDir: string,
   suite: readonly BenchTask[],
-  configs: readonly [ConfigVariant, ConfigVariant],
+  configs: readonly [ConfigVariant, ConfigVariant]
 ): Promise<string> {
   const lines: string[] = [];
   lines.push(
-    `peek bench run hasn't trusted this suite before (or it changed): ${suiteDir}`,
+    `peek bench run hasn't trusted this suite before (or it changed): ${suiteDir}`
   );
   lines.push("");
   lines.push(`${suite.length} task${suite.length === 1 ? "" : "s"}:`);
   for (const task of suite) {
     lines.push(`  ${task.name}`);
-    for (const cmd of task.setup ?? []) lines.push(`    setup:  ${cmd}`);
+    for (const cmd of task.setup ?? []) {
+      lines.push(`    setup:  ${cmd}`);
+    }
     lines.push(`    verify: ${task.verify}`);
   }
 
@@ -258,20 +270,23 @@ export async function formatTrustPrompt(
     ["b", configs[1]],
   ];
   for (const [role, config] of roles) {
-    if (config.dir === "current") continue;
+    if (config.dir === "current") {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: Preserve deterministic prompt section ordering.
     const files = await existingOverlayFiles(config.dir);
     lines.push("");
     lines.push(`config-${role} (${config.name}): ${config.dir}`);
     lines.push(
       files.length > 0
         ? `  config files: ${files.join(", ")}`
-        : "  config files: (none found)",
+        : "  config files: (none found)"
     );
   }
 
   lines.push("");
   lines.push(
-    "These commands will run with your user's permissions. Trust this suite?",
+    "These commands will run with your user's permissions. Trust this suite?"
   );
   return lines.join("\n");
 }

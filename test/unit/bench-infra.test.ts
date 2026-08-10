@@ -26,6 +26,12 @@ import {
   sweepOrphans,
 } from "../../src/bench/workspace.js";
 
+const TEST_PATTERN_1 = /not valid JSON/;
+const TEST_PATTERN_2 = /setup/;
+const TEST_PATTERN_3 = /not found/;
+const TEST_PATTERN_4 = /invalid JSON/;
+const TEST_PATTERN_5 = /verify/;
+
 function tmpDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -41,12 +47,15 @@ function isAlive(pid: number): boolean {
 
 async function waitUntil(
   predicate: () => boolean,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return;
-    await new Promise((r) => setTimeout(r, 25));
+    if (predicate()) {
+      return;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: Polling must wait between sequential predicate checks.
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
@@ -70,7 +79,7 @@ describe("spawnDetached", () => {
     const result = await spawnDetached(
       "/bin/sh",
       ["-c", "echo out; echo err 1>&2; exit 7"],
-      { cwd: tmpdir(), timeoutMs: 5000 },
+      { cwd: tmpdir(), timeoutMs: 5000 }
     );
     expect(result.exitCode).toBe(7);
     expect(result.timedOut).toBe(false);
@@ -90,7 +99,7 @@ describe("spawnDetached", () => {
     const result = await spawnDetached(
       "/bin/sh",
       ["-c", "yes err | head -c 5000 1>&2"],
-      { cwd: tmpdir(), timeoutMs: 5000 },
+      { cwd: tmpdir(), timeoutMs: 5000 }
     );
     const bytes = Buffer.byteLength(result.stderrTail, "utf8");
     expect(bytes).toBeLessThanOrEqual(2048);
@@ -125,7 +134,7 @@ describe("spawnDetached", () => {
     // Wait for both pid files to appear before the timeout fires.
     await waitUntil(
       () => existsSync(shPidFile) && existsSync(grandchildPidFile),
-      2000,
+      2000
     );
 
     const result = await resultPromise;
@@ -133,10 +142,10 @@ describe("spawnDetached", () => {
 
     const shPid = Number(readFileSync(shPidFile, "utf8").trim());
     const grandchildPid = Number(
-      readFileSync(grandchildPidFile, "utf8").trim(),
+      readFileSync(grandchildPidFile, "utf8").trim()
     );
 
-    await waitUntil(() => !isAlive(shPid) && !isAlive(grandchildPid), 3000);
+    await waitUntil(() => !(isAlive(shPid) || isAlive(grandchildPid)), 3000);
     expect(isAlive(shPid)).toBe(false);
     expect(isAlive(grandchildPid)).toBe(false);
   }, 10_000);
@@ -155,17 +164,17 @@ describe("loadSuite", () => {
         name: "a-task",
         prompt: "do a",
         verify: "true",
-      }),
+      })
     );
     writeFileSync(
       join(dir, "a-file.json"),
       JSON.stringify({
         name: "b-task",
         prompt: "do b",
-        verify: "true",
         setup: ["echo setup"],
         timeoutS: 60,
-      }),
+        verify: "true",
+      })
     );
 
     const tasks = await loadSuite(dir);
@@ -173,9 +182,9 @@ describe("loadSuite", () => {
     expect(tasks[1]).toEqual({
       name: "b-task",
       prompt: "do b",
-      verify: "true",
       setup: ["echo setup"],
       timeoutS: 60,
+      verify: "true",
     });
   });
 
@@ -184,29 +193,29 @@ describe("loadSuite", () => {
     const file = join(dir, "bad.json");
     writeFileSync(file, JSON.stringify({ name: "x", prompt: "y" }));
 
-    await expect(loadSuite(dir)).rejects.toThrow(/verify/);
+    await expect(loadSuite(dir)).rejects.toThrow(TEST_PATTERN_5);
     await expect(loadSuite(dir)).rejects.toThrow(file);
   });
 
   it("throws on invalid JSON", async () => {
     const dir = tmpDir("peek-bench-suite-");
     writeFileSync(join(dir, "broken.json"), "{ not json");
-    await expect(loadSuite(dir)).rejects.toThrow(/not valid JSON/);
+    await expect(loadSuite(dir)).rejects.toThrow(TEST_PATTERN_1);
   });
 
   it("throws when setup is not an array of strings", async () => {
     const dir = tmpDir("peek-bench-suite-");
     writeFileSync(
       join(dir, "task.json"),
-      JSON.stringify({ name: "x", prompt: "y", verify: "true", setup: [1] }),
+      JSON.stringify({ name: "x", prompt: "y", setup: [1], verify: "true" })
     );
-    await expect(loadSuite(dir)).rejects.toThrow(/setup/);
+    await expect(loadSuite(dir)).rejects.toThrow(TEST_PATTERN_2);
   });
 
   it("throws for a missing suite directory", async () => {
     await expect(
-      loadSuite(join(tmpdir(), "peek-bench-suite-does-not-exist")),
-    ).rejects.toThrow(/not found/);
+      loadSuite(join(tmpdir(), "peek-bench-suite-does-not-exist"))
+    ).rejects.toThrow(TEST_PATTERN_3);
   });
 });
 
@@ -230,7 +239,7 @@ describe("applyConfig", () => {
     await mkdir(join(variantDir, ".claude"), { recursive: true });
     writeFileSync(
       join(variantDir, ".claude", "settings.json"),
-      JSON.stringify({ permissions: { allow: ["Bash"] } }),
+      JSON.stringify({ permissions: { allow: ["Bash"] } })
     );
     writeFileSync(join(variantDir, "model"), "claude-opus-5\n");
 
@@ -240,17 +249,19 @@ describe("applyConfig", () => {
     const result = await applyConfig(variantDir, workspaceDir);
 
     expect(result.model).toBe("claude-opus-5");
-    expect(result.appliedFiles.sort()).toEqual(
-      ["CLAUDE.md", "AGENTS.md", join(".claude", "settings.json")].sort(),
+    expect(
+      result.appliedFiles.sort((left, right) => left.localeCompare(right))
+    ).toEqual(
+      ["CLAUDE.md", "AGENTS.md", join(".claude", "settings.json")].sort()
     );
     expect(await readFile(join(workspaceDir, "CLAUDE.md"), "utf8")).toBe(
-      "claude rules",
+      "claude rules"
     );
     expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toBe(
-      "agent rules",
+      "agent rules"
     );
     const settings = JSON.parse(
-      await readFile(join(workspaceDir, ".claude", "settings.json"), "utf8"),
+      await readFile(join(workspaceDir, ".claude", "settings.json"), "utf8")
     );
     expect(settings).toEqual({ permissions: { allow: ["Bash"] } });
   });
@@ -266,7 +277,7 @@ describe("applyConfig", () => {
     expect("model" in result).toBe(false);
     expect(existsSync(join(workspaceDir, "AGENTS.md"))).toBe(false);
     expect(existsSync(join(workspaceDir, ".claude", "settings.json"))).toBe(
-      false,
+      false
     );
   });
 
@@ -276,14 +287,14 @@ describe("applyConfig", () => {
     await mkdir(join(variantDir, ".claude"), { recursive: true });
     writeFileSync(
       join(variantDir, ".claude", "settings.json"),
-      "{ not valid json",
+      "{ not valid json"
     );
 
     await expect(applyConfig(variantDir, workspaceDir)).rejects.toThrow(
-      /invalid JSON/,
+      TEST_PATTERN_4
     );
     expect(existsSync(join(workspaceDir, ".claude", "settings.json"))).toBe(
-      false,
+      false
     );
   });
 });
@@ -313,7 +324,7 @@ describe("workspace lifecycle", () => {
       execFileSync("git", ["symbolic-ref", "-q", "HEAD"], {
         cwd: ws.dir,
         stdio: "pipe",
-      }),
+      })
     ).toThrow();
 
     await destroyWorkspace(ws);
@@ -351,7 +362,7 @@ describe("workspace lifecycle", () => {
       const fail = await runSetup(
         ws,
         ["touch b.txt", "exit 2", "touch c.txt"],
-        5000,
+        5000
       );
       expect(fail.ok).toBe(false);
       expect(fail.failedCommand).toBe("exit 2");
