@@ -99,7 +99,7 @@ function readPeekVersion(): string {
         name?: string;
         version?: string;
       };
-      if (pkg.name === "peek-agent" && typeof pkg.version === "string") {
+      if (pkg.name === "@mstuart/peek" && typeof pkg.version === "string") {
         return pkg.version;
       }
     } catch {

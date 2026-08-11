@@ -1,6 +1,6 @@
 # peek — Design Reference
 
-Living design reference for `peek` (npm `peek-agent`). This document replaces
+Living design reference for `peek` (npm `@mstuart/peek`). This document replaces
 `docs/PLAN.md`, `docs/PLAN-V2.md`, and `docs/IMPLEMENTATION.md` (deleted
 2026-08-08, consolidated here since both are fully implemented — v1 and v2
 are shipped complete). It describes the system **as implemented**, not as
@@ -18,7 +18,7 @@ The honest bar is **native tooling** first, competitors second:
 - **agent-replay** (tiny): cross-harness step-level trace diff; no composition/cost. Architecture validation only.
 - **Watch item:** codex-rs `rollout-trace` (internal) reconstructs model-visible state from rollouts — OpenAI building this layer for Codex. Monitor.
 
-**Pitch order (README): 1) `peek diff` (headline screenshot, curated session pair; `--last 2` gives it a zero-argument story), 2) compaction timeline + shrink/discard numbers, 3) historical cost attribution with miss-reason spike explanations, 4) historical composition (residual honestly labeled), 5) `report.html` shareable artifact. First documented command for a new user: `npx peek-agent list`.**
+**Pitch order (README): 1) `peek diff` (headline screenshot, curated session pair; `--last 2` gives it a zero-argument story), 2) compaction timeline + shrink/discard numbers, 3) historical cost attribution with miss-reason spike explanations, 4) historical composition (residual honestly labeled), 5) `report.html` shareable artifact. First documented command for a new user: `npx @mstuart/peek list`. The npm package name is `@mstuart/peek`; `peek` is the CLI binary name only, and this project does not claim the unrelated public npm package `peek`.**
 
 ### Non-goals
 

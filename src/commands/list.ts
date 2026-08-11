@@ -1,6 +1,6 @@
 // `peek list` (T3.1) — docs/DESIGN.md § "CLI surface": "documented first
 // command: cross-harness inventory (cost/tokens/compactions)". First command
-// a new user runs (`npx peek-agent list`, per PLAN's pitch order).
+// a new user runs (`npx @mstuart/peek list`, per DESIGN.md's pitch order).
 //
 // Pipeline (commands/shared.ts's file header): parse -> dedupSession ->
 // priceSession -> sessionTotals. Composition is deliberately skipped — see
