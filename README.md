@@ -31,7 +31,7 @@ peek reads the session logs your coding agent already writes to disk — Claude 
 
 ## Install
 
-Requires Node 20+. Run it with npx, or install globally:
+Requires Node 20+. The npm distribution is `@mstuart/peek`; `peek` is only the installed CLI command name. Run it with npx, or install globally:
 
 ```sh
 npx @mstuart/peek list
