@@ -24,20 +24,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Verify tag matches package.json version
+      - run: npm run smoke:pack
+      - name: Verify tag and package identity
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          if [ "$PKG_NAME" != "@mstuart/peek" ]; then
+            echo "Package name ($PKG_NAME) is not @mstuart/peek" >&2
+            exit 1
+          fi
           if [ "$TAG" != "$PKG_VERSION" ]; then
             echo "Tag version ($TAG) does not match package.json version ($PKG_VERSION)" >&2
             exit 1
           fi
-      - name: Publish to npm
+      - name: Publish @mstuart/peek to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" --title "peek $TAG" --generate-notes
+        run: gh release create "$TAG" --title "@mstuart/peek $TAG" --generate-notes --verify-tag
