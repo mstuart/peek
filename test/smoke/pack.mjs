@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const repoRoot = new URL("../..", import.meta.url).pathname;
 const tempRoot = mkdtempSync(join(tmpdir(), "peek-pack-smoke-"));
+const NPM_PACK_JSON_AT_END = /\[\s*\{[\s\S]*\}\s*\]\s*$/;
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -15,8 +16,18 @@ function run(command, args, options = {}) {
   });
 }
 
+function parseNpmPackJson(output) {
+  const match = output.match(NPM_PACK_JSON_AT_END);
+  if (!match) {
+    throw new Error(
+      `npm pack --json did not end with a JSON array:\n${output}`
+    );
+  }
+  return JSON.parse(match[0]);
+}
+
 try {
-  const packJson = JSON.parse(
+  const packJson = parseNpmPackJson(
     run("npm", [
       "pack",
       "--ignore-scripts",
