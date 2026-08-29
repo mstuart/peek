@@ -39,7 +39,7 @@ npx @mstuart/peek list
 npm install -g @mstuart/peek
 ```
 
-Prefer source? `git clone https://github.com/mstuart/peek.git && cd peek && npm install && npm run build && node dist/cli.js list`. Everything runs locally — no telemetry, session data never leaves your machine ([SECURITY.md](SECURITY.md)).
+Prefer source? `git clone https://github.com/mstuart/peek.git && cd peek && npm ci && npm run build && node dist/cli.js list`. Everything runs locally — no telemetry, session data never leaves your machine ([SECURITY.md](SECURITY.md)).
 
 ```
 harness      session   cwd                     started           turns  tokens     cost  compactions
